@@ -171,7 +171,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </div>
 
           {/* Tab Navigation Buttons */}
-          <div className="flex items-center space-x-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <button
               onClick={() => setActiveView('dashboard')}
               className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'dashboard'
