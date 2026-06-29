@@ -1,0 +1,23 @@
+{
+  "short_name": "ArLABS Admin",
+  "name": "ArLABS Admin System Panel",
+  "icons": [
+    {
+      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#181825",
+  "theme_color": "#1e1e2e",
+  "display": "standalone",
+  "orientation": "portrait"
+}
