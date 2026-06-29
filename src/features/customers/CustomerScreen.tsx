@@ -7,6 +7,7 @@ interface Customer {
   name: string;
   email: string;
   whatsapp: string;
+  phone?: string | null;
   status: 'ACTIVE' | 'SUSPENDED';
   license_count: number;
   created_at: string;
@@ -55,6 +56,14 @@ export const CustomerScreen: React.FC = () => {
 
   useEffect(() => {
     fetchCustomers();
+  }, []);
+
+  useEffect(() => {
+    const handleDbRefresh = () => {
+      fetchCustomers();
+    };
+    window.addEventListener('db-refresh', handleDbRefresh);
+    return () => window.removeEventListener('db-refresh', handleDbRefresh);
   }, []);
 
   const fetchActivationHistory = async (customer: any) => {
@@ -248,6 +257,7 @@ export const CustomerScreen: React.FC = () => {
                   <th className="py-4 px-6">Customer Name</th>
                   <th className="py-4 px-6">Email Address</th>
                   <th className="py-4 px-6">WhatsApp</th>
+                  <th className="py-4 px-6">Ecommerce</th>
                   <th className="py-4 px-6">Active Licenses</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 text-right">Registration Date</th>
@@ -256,7 +266,7 @@ export const CustomerScreen: React.FC = () => {
               <tbody className="divide-y divide-gray-100 text-[#1E293B]">
                 {filteredCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
+                    <td colSpan={7} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
                       NO_ACTIVE_RECORDS_FOUND
                     </td>
                   </tr>
@@ -286,6 +296,11 @@ export const CustomerScreen: React.FC = () => {
                         {/* WhatsApp */}
                         <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
                           {cust.whatsapp}
+                        </td>
+
+                        {/* Ecommerce */}
+                        <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
+                          {cust.phone || '-'}
                         </td>
 
                         {/* License count */}
@@ -355,6 +370,12 @@ export const CustomerScreen: React.FC = () => {
                   <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider">WhatsApp Line</label>
                   <p className="text-xs font-mono text-[#64748B]">{selectedCustomer.whatsapp}</p>
                 </div>
+                {selectedCustomer.phone && (
+                  <div>
+                    <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider">Ecommerce</label>
+                    <p className="text-xs font-mono text-[#64748B]">{selectedCustomer.phone}</p>
+                  </div>
+                )}
               </div>
 
               {/* Activation Logs (History) */}

@@ -9,7 +9,7 @@ interface NotificationLog {
   target_type: 'ALL' | 'CUSTOMER' | 'APP';
   target_id: string | null;
   scheduled_at: string | null;
-  status: 'QUEUED' | 'SENT';
+  status: 'QUEUED' | 'SENT' | 'FAILED';
   created_at: string;
 }
 
@@ -104,33 +104,31 @@ export const NotificationScreen: React.FC = () => {
     setShowConfirmModal(true);
   };
 
-  const sendFcmNotification = async (notifTitle: string, notifBody: string, targetToken: string) => {
-    try {
-      const serverKey = (import.meta as any).env?.VITE_FCM_SERVER_KEY || 'AIzaSyA88_FAKE_SERVER_KEY_FOR_TESTS';
-      const response = await fetch('https://fcm.googleapis.com/fcm/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `key=${serverKey}`
+  const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
+    const serverKey = (import.meta as any).env?.VITE_FIREBASE_FCM_SERVER_KEY || 'AIzaSyA88_FAKE_SERVER_KEY_FOR_TESTS';
+    const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `key=${serverKey}`
+      },
+      body: JSON.stringify({
+        to: targetTokenOrTopic,
+        notification: {
+          title: notifTitle,
+          body: notifBody,
+          sound: 'default'
         },
-        body: JSON.stringify({
-          to: targetToken,
-          notification: {
-            title: notifTitle,
-            body: notifBody,
-            sound: 'default'
-          },
-          data: {
-            click_action: 'FLUTTER_NOTIFICATION_CLICK',
-            status: 'done'
-          }
-        })
-      });
-      return response.ok;
-    } catch (err) {
-      console.error("FCM API Endpoint call failed:", err);
-      return false;
+        data: {
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          status: 'done'
+        }
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Firebase Cloud Messaging request failed with status ${response.status}`);
     }
+    return true;
   };
 
   // Broadcast Notification after confirmation modal approve
@@ -138,6 +136,7 @@ export const NotificationScreen: React.FC = () => {
     setShowConfirmModal(false);
     setSubmitLoading(true);
 
+    let notifId = '';
     try {
       const { data: insertedNotifs, error } = await supabase
         .from('notifications')
@@ -160,49 +159,38 @@ export const NotificationScreen: React.FC = () => {
         return;
       }
 
-      const notifId = insertedNotifs[0].id;
-      alert("Success! Notification payload successfully queued in database.");
+      notifId = insertedNotifs[0].id;
 
-      // 3. DYNAMIC TOKEN LOOKUP
-      let targetToken = '';
+      // Dynamic token or topic lookup
+      let targetTokenOrTopic = '';
       if (targetType === 'ALL') {
-        targetToken = '/topics/all';
+        targetTokenOrTopic = '/topics/all_users';
       } else if (targetType === 'CUSTOMER') {
         const { data: cust } = await supabase
           .from('customers')
           .select('fcm_token')
           .eq('id', targetId)
           .maybeSingle();
-        targetToken = (cust as any)?.fcm_token || '';
+        targetTokenOrTopic = (cust as any)?.fcm_token || '';
 
-        if (!targetToken) {
-          const { data: dev } = await supabase
-            .from('devices')
-            .select('fcm_token')
-            .eq('customer_id', targetId)
-            .limit(1);
-          if (dev && dev.length > 0) {
-            targetToken = (dev[0] as any).fcm_token || '';
-          }
+        if (!targetTokenOrTopic) {
+          alert("Token perangkat belum terdaftar, namun data antrean tetap diproses.");
         }
       } else if (targetType === 'APP') {
-        targetToken = `/topics/${targetId.replace(/\./g, '_')}`;
+        targetTokenOrTopic = `/topics/${targetId.replace(/\./g, '_')}`;
       }
 
-      // If token is found, execute send
-      if (targetToken) {
-        const fcmSuccess = await sendFcmNotification(title, body, targetToken);
-        if (fcmSuccess) {
-          // Update status to SENT
-          const { error: updateErr } = await supabase
-            .from('notifications')
-            .update({ status: 'SENT' })
-            .eq('id', notifId);
-          if (!updateErr) {
-            console.log("FCM delivered successfully. Status set to SENT.");
-          }
-        } else {
-          console.warn("FCM endpoint delivery failed. Payload remains QUEUED.");
+      // If token/topic is valid, execute send
+      if (targetTokenOrTopic) {
+        await sendFcmNotification(title, body, targetTokenOrTopic);
+        // If successful: update status to SENT
+        const { error: updateErr } = await supabase
+          .from('notifications')
+          .update({ status: 'SENT' })
+          .eq('id', notifId);
+        if (!updateErr) {
+          console.log("FCM delivered successfully. Status set to SENT.");
+          alert("Success! Notification payload successfully sent.");
         }
       } else {
         console.warn("No valid FCM token or topic found for target. Payload remains QUEUED.");
@@ -214,15 +202,23 @@ export const NotificationScreen: React.FC = () => {
       setScheduledTime('');
       setScheduleMode('IMMEDIATE');
 
+    } catch (err) {
+      console.error('Failed to insert metadata or broadcast notifications: ', err);
+      if (notifId) {
+        // Update the status of that specific notification row to 'FAILED'
+        await supabase
+          .from('notifications')
+          .update({ status: 'FAILED' })
+          .eq('id', notifId);
+      }
+      alert("Error: Gagal melakukan pengiriman notifikasi FCM.");
+    } finally {
+      // Refresh the delivery history log table state at the bottom of the screen
       if (typeof (window as any).fetchNotificationLogs === 'function') {
         (window as any).fetchNotificationLogs();
       } else {
         await fetchLogs();
       }
-
-    } catch (err) {
-      console.error('Failed to insert metadata or broadcast notifications: ', err);
-    } finally {
       setSubmitLoading(false);
     }
   };
@@ -510,10 +506,12 @@ export const NotificationScreen: React.FC = () => {
                   </tr>
                 ) : (
                   logs.map((log) => {
-                    const isSent = log.status === 'SENT';
-                    const badgeStyle = isSent 
-                      ? 'bg-green-50 text-green-600 border border-green-100' 
-                      : 'bg-yellow-50 text-yellow-600 border border-yellow-100';
+                    let badgeStyle = 'bg-yellow-50 text-yellow-600 border border-yellow-100';
+                    if (log.status === 'SENT') {
+                      badgeStyle = 'bg-green-50 text-green-600 border border-green-100';
+                    } else if (log.status === 'FAILED') {
+                      badgeStyle = 'bg-red-50 text-red-600 border border-red-100';
+                    }
 
                     return (
                       <tr key={log.id} className="hover:bg-gray-50/50 transition-all duration-200">

@@ -5,6 +5,8 @@ import { CustomerScreen } from '../customers/CustomerScreen';
 import { AppManagementScreen } from '../applications/AppManagementScreen';
 import { UpdateManagementScreen } from '../updates/UpdateManagementScreen';
 import { NotificationScreen } from '../notifications/NotificationScreen';
+import { AnnouncementScreen } from '../announcements/AnnouncementScreen';
+import { RemoteConfigScreen } from '../config/RemoteConfigScreen';
 import { 
   RefreshCw, 
   Wifi,
@@ -26,7 +28,7 @@ interface LogEntry {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -157,6 +159,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     fetchDashboardData();
   }, [profile, activeView]);
 
+  useEffect(() => {
+    const handleDbRefresh = () => {
+      fetchDashboardData();
+    };
+    window.addEventListener('db-refresh', handleDbRefresh);
+    return () => window.removeEventListener('db-refresh', handleDbRefresh);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F0F2F5] text-[#1E293B] font-['Outfit'] select-none p-8 overflow-x-hidden relative">
 
@@ -225,6 +235,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 }`}
             >
               Push Broadcast
+            </button>
+            <button
+              onClick={() => setActiveView('announcements')}
+              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'announcements'
+                  ? 'bg-[#0EA5E9] text-white shadow-[2px_2px_5px_rgba(14,165,233,0.3)]'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
+                }`}
+            >
+              Announcements
+            </button>
+            <button
+              onClick={() => setActiveView('config')}
+              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'config'
+                  ? 'bg-[#0EA5E9] text-white shadow-[2px_2px_5px_rgba(14,165,233,0.3)]'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
+                }`}
+            >
+              Remote Config
             </button>
           </div>
         </div>
@@ -446,9 +474,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       ) : activeView === 'updates' ? (
         // RENDER OTA UPDATES SCREEN TABLE WORKSPACE
         <UpdateManagementScreen />
-      ) : (
+      ) : activeView === 'notifications' ? (
         // RENDER PUSH NOTIFICATION SCREEN TABLE WORKSPACE
         <NotificationScreen />
+      ) : activeView === 'announcements' ? (
+        // RENDER IN-APP ANNOUNCEMENT SCREEN TABLE WORKSPACE
+        <AnnouncementScreen />
+      ) : (
+        // RENDER REMOTE CONFIGURATION SCREEN TABLE WORKSPACE
+        <RemoteConfigScreen />
       )}
 
     </div>
