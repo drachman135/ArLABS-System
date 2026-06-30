@@ -73,7 +73,7 @@ export const NotificationScreen: React.FC = () => {
   useEffect(() => {
     fetchLogs();
     fetchDropdownData();
-    
+
     // Setup real-time listeners for updates (Sprint A8 real-time sync requirement)
     const channel = supabase
       .channel('public:notifications')
@@ -105,7 +105,7 @@ export const NotificationScreen: React.FC = () => {
   };
 
   const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
-    const serverKey = (import.meta as any).env?.VITE_FIREBASE_FCM_SERVER_KEY || 'AIzaSyA88_FAKE_SERVER_KEY_FOR_TESTS';
+    const serverKey = (import.meta as any).env?.VITE_FIREBASE_FCM_SERVER_KEY || 'AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc';
     const response = await fetch('https://fcm.googleapis.com/fcm/send', {
       method: 'POST',
       headers: {
@@ -235,7 +235,7 @@ export const NotificationScreen: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 font-['Outfit'] select-none">
-      
+
       {/* 1. Frosted Glass Action Header Panel */}
       <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-6 rounded-[24px] flex justify-between items-center">
         <div>
@@ -253,7 +253,7 @@ export const NotificationScreen: React.FC = () => {
 
       {/* 2. Decoupled Form and Logs Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
+
         {/* Left Side: Broadcast Composer (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           <div className="flex items-center space-x-2 text-[#64748B]">
@@ -262,7 +262,7 @@ export const NotificationScreen: React.FC = () => {
           </div>
 
           <form onSubmit={handleOpenConfirm} className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-6 rounded-[24px] space-y-6">
-            
+
             {/* Title */}
             <div className="space-y-2">
               <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
@@ -361,22 +361,20 @@ export const NotificationScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setScheduleMode('IMMEDIATE')}
-                  className={`py-2 px-1 text-[10px] font-bold rounded-lg border transition-all duration-300 uppercase ${
-                    scheduleMode === 'IMMEDIATE'
+                  className={`py-2 px-1 text-[10px] font-bold rounded-lg border transition-all duration-300 uppercase ${scheduleMode === 'IMMEDIATE'
                       ? 'bg-[#0EA5E9] text-white border-transparent shadow-sm'
                       : 'bg-white border-gray-200 text-[#64748B] hover:text-[#1E293B]'
-                  }`}
+                    }`}
                 >
                   Immediate
                 </button>
                 <button
                   type="button"
                   onClick={() => setScheduleMode('SCHEDULE')}
-                  className={`py-2 px-1 text-[10px] font-bold rounded-lg border transition-all duration-300 uppercase ${
-                    scheduleMode === 'SCHEDULE'
+                  className={`py-2 px-1 text-[10px] font-bold rounded-lg border transition-all duration-300 uppercase ${scheduleMode === 'SCHEDULE'
                       ? 'bg-[#0EA5E9] text-white border-transparent shadow-sm'
                       : 'bg-white border-gray-200 text-[#64748B] hover:text-[#1E293B]'
-                  }`}
+                    }`}
                 >
                   Schedule
                 </button>
@@ -427,10 +425,10 @@ export const NotificationScreen: React.FC = () => {
           <div className="w-72 h-[480px] bg-slate-950 rounded-[40px] border-[6px] border-slate-800 shadow-[10px_10px_30px_#d1d5db,-10px_-10px_30px_#ffffff] flex flex-col justify-start items-center p-4 relative overflow-hidden">
             {/* Camera notch */}
             <div className="w-16 h-4 bg-slate-800 rounded-b-xl absolute top-0 left-1/2 -translate-x-1/2 z-10" />
-            
+
             {/* Screen Wallpaper */}
             <div className="absolute inset-0 bg-gradient-to-b from-[#1e293b] via-[#0f172a] to-[#020617] opacity-90 z-0" />
-            
+
             {/* Screen Header */}
             <div className="w-full flex justify-between items-center text-[10px] text-white/50 font-bold z-10 mt-1.5 px-3">
               <span>10:42</span>
