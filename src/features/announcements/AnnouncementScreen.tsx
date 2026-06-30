@@ -217,6 +217,9 @@ export const AnnouncementScreen: React.FC = () => {
     const startTime = new Date(start).getTime();
     const endTime = new Date(end).getTime();
 
+    if (now < startTime) {
+      return 'SCHEDULED';
+    }
     if (now >= startTime && now <= endTime) {
       return 'ACTIVE';
     }
@@ -445,14 +448,15 @@ export const AnnouncementScreen: React.FC = () => {
                     announcements.map((ann, idx) => {
                       const status = getStatusText(ann.start_date, ann.end_date);
                       const isPopup = ann.type === 'POPUP';
-                      const isActive = status === 'ACTIVE';
 
                       const typeBadge = isPopup 
                         ? 'bg-purple-50 text-purple-600 border border-purple-100'
                         : 'bg-indigo-50 text-indigo-600 border border-indigo-100';
 
-                      const statusBadge = isActive
+                      const statusBadge = status === 'ACTIVE'
                         ? 'bg-green-50 text-green-600 border border-green-100'
+                        : status === 'SCHEDULED'
+                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
                         : 'bg-red-50 text-red-500 border border-red-100';
 
                       return (
