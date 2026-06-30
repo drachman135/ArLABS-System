@@ -198,7 +198,7 @@ export const NotificationScreen: React.FC = () => {
     // Generate OAuth 2.0 access token on-the-fly via Web Crypto API
     const accessToken = await getGoogleAccessToken(clientEmail, privateKey.replace(/\\n/g, '\n'));
 
-    // Construct FCM v1 payload
+    // Construct FCM v1 payload with high deliverability options
     const message: any = {
       notification: {
         title: notifTitle,
@@ -207,6 +207,25 @@ export const NotificationScreen: React.FC = () => {
       data: {
         click_action: 'FLUTTER_NOTIFICATION_CLICK',
         status: 'done'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          channel_id: 'high_importance_channel'
+        }
+      },
+      apns: {
+        headers: {
+          'apns-priority': '10'
+        },
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1
+          }
+        }
       }
     };
 
@@ -278,7 +297,7 @@ export const NotificationScreen: React.FC = () => {
           alert("Token perangkat belum terdaftar, namun data antrean tetap diproses.");
         }
       } else if (targetType === 'APP') {
-        targetTokenOrTopic = `/topics/${targetId.replace(/\./g, '_')}`;
+        targetTokenOrTopic = `/topics/${targetId}`;
       }
 
       // If token/topic is valid, execute send
