@@ -24,6 +24,85 @@ interface CustomerOption {
   email: string;
 }
 
+const base64url = (input: Uint8Array | ArrayBuffer): string => {
+  const byteArray = input instanceof Uint8Array ? input : new Uint8Array(input);
+  let byteString = '';
+  for (let i = 0; i < byteArray.byteLength; i++) {
+    byteString += String.fromCharCode(byteArray[i]);
+  }
+  return btoa(byteString)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+};
+
+const getGoogleAccessToken = async (clientEmail: string, privateKeyPem: string): Promise<string> => {
+  const cleanPem = privateKeyPem
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+
+  const binaryStr = atob(cleanPem);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  const key = await window.crypto.subtle.importKey(
+    "pkcs8",
+    bytes.buffer,
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: "SHA-256"
+    },
+    false,
+    ["sign"]
+  );
+
+  const header = { alg: "RS256", typ: "JWT" };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: clientEmail,
+    sub: clientEmail,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600
+  };
+
+  const encoder = new TextEncoder();
+  const headerStr = base64url(encoder.encode(JSON.stringify(header)));
+  const payloadStr = base64url(encoder.encode(JSON.stringify(payload)));
+  const dataToSign = encoder.encode(headerStr + "." + payloadStr);
+
+  const signature = await window.crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    dataToSign
+  );
+
+  const jwt = headerStr + "." + payloadStr + "." + base64url(signature);
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to obtain Google access token: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+};
+
 export const NotificationScreen: React.FC = () => {
   const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [apps, setApps] = useState<ApplicationOption[]>([]);
@@ -105,28 +184,50 @@ export const NotificationScreen: React.FC = () => {
   };
 
   const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
-    const serverKey = (import.meta as any).env?.VITE_FIREBASE_FCM_SERVER_KEY || 'AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc';
-    const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+    const projectId = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID;
+    const clientEmail = (import.meta as any).env?.VITE_FIREBASE_CLIENT_EMAIL;
+    const privateKey = (import.meta as any).env?.VITE_FIREBASE_PRIVATE_KEY;
+
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error(
+        "FCM credentials are not configured in environment variables. " +
+        "Please specify VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_CLIENT_EMAIL, and VITE_FIREBASE_PRIVATE_KEY in .env.local"
+      );
+    }
+
+    // Generate OAuth 2.0 access token on-the-fly via Web Crypto API
+    const accessToken = await getGoogleAccessToken(clientEmail, privateKey.replace(/\\n/g, '\n'));
+
+    // Construct FCM v1 payload
+    const message: any = {
+      notification: {
+        title: notifTitle,
+        body: notifBody
+      },
+      data: {
+        click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        status: 'done'
+      }
+    };
+
+    if (targetTokenOrTopic.startsWith('/topics/')) {
+      message.topic = targetTokenOrTopic.substring('/topics/'.length);
+    } else {
+      message.token = targetTokenOrTopic;
+    }
+
+    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `key=${serverKey}`
+        'Authorization': `Bearer ${accessToken}`
       },
-      body: JSON.stringify({
-        to: targetTokenOrTopic,
-        notification: {
-          title: notifTitle,
-          body: notifBody,
-          sound: 'default'
-        },
-        data: {
-          click_action: 'FLUTTER_NOTIFICATION_CLICK',
-          status: 'done'
-        }
-      })
+      body: JSON.stringify({ message })
     });
+
     if (!response.ok) {
-      throw new Error(`Firebase Cloud Messaging request failed with status ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Firebase Cloud Messaging HTTP v1 request failed: ${response.status} - ${errorText}`);
     }
     return true;
   };
