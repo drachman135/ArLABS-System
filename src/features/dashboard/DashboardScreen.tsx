@@ -7,6 +7,7 @@ import { UpdateManagementScreen } from '../updates/UpdateManagementScreen';
 import { NotificationScreen } from '../notifications/NotificationScreen';
 import { AnnouncementScreen } from '../announcements/AnnouncementScreen';
 import { RemoteConfigScreen } from '../config/RemoteConfigScreen';
+import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
 import { 
   RefreshCw, 
   Wifi,
@@ -28,7 +29,7 @@ interface LogEntry {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -190,6 +191,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 }`}
             >
               Overview Panel
+            </button>
+            <button
+              onClick={() => setActiveView('analytics')}
+              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'analytics'
+                  ? 'bg-gradient-to-r from-[#6366F1] to-[#0EA5E9] text-white shadow-[2px_2px_8px_rgba(99,102,241,0.35)]'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
+                }`}
+            >
+              Analytics ✦
             </button>
             <button
               onClick={() => setActiveView('licenses')}
@@ -461,6 +471,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               })}
             </div>
           </section>
+        </main>
+      ) : activeView === 'analytics' ? (
+        // RENDER ANALYTICS DASHBOARD
+        <main className="max-w-7xl mx-auto">
+          <AnalyticsDashboard />
         </main>
       ) : activeView === 'licenses' ? (
         // RENDER LICENSE SCREEN TABLE WORKSPACE
