@@ -3,7 +3,7 @@ import {
   Download, Smartphone, TrendingUp, CheckCircle2, AlertTriangle,
   RefreshCw, Search, Filter, Package, BarChart2, Activity,
   ChevronUp, ChevronDown,
-  Calendar, ArrowUpRight, Clock, Zap, Shield,
+  Calendar, ArrowUpRight, Zap, Shield,
 } from 'lucide-react';
 import {
   fetchDownloadSummary,
@@ -469,28 +469,15 @@ export const ApkStatsDashboard: React.FC = () => {
               </div>
             </Card>
 
-            {/* Download Source breakdown — static structural placeholder */}
+            {/* Download Source breakdown */}
             <Card className="p-6">
               <SectionLabel icon={<Filter className="w-4 h-4" />} title="Download Source Breakdown" subtitle="Source Attribution" />
-              <div className="space-y-2.5">
-                {[
-                  { label: 'Cloudflare CDN', pct: 85, color: '#F97316' },
-                  { label: 'Direct Link', pct: 10, color: '#0EA5E9' },
-                  { label: 'QR Code', pct: 3, color: '#8B5CF6' },
-                  { label: 'Website', pct: 2, color: '#10B981' },
-                ].map((src, i) => (
-                  <div key={i} className="space-y-0.5">
-                    <div className="flex justify-between text-[10px]">
-                      <span className="text-[#64748B] font-bold">{src.label}</span>
-                      <span className="font-black text-[#1E293B]">{src.pct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${src.pct}%`, backgroundColor: src.color }} />
-                    </div>
-                  </div>
-                ))}
-                <p className="text-[9px] text-[#94a3b8] mt-2">Source attribution requires <code className="bg-gray-100 px-1 rounded">download_source</code> field in apk_download_logs.</p>
+              <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                <Filter className="w-8 h-8 text-gray-200" />
+                <p className="text-sm font-bold text-[#94a3b8]">No source data yet</p>
+                <p className="text-[10px] text-gray-400 text-center max-w-xs">
+                  Source attribution will appear here once devices sync via the <code className="bg-gray-100 px-1 rounded">download_source</code> field in apk_download_logs.
+                </p>
               </div>
             </Card>
           </div>
@@ -788,43 +775,6 @@ export const ApkStatsDashboard: React.FC = () => {
           )}
         </div>
       )}
-
-      {/* ── SQL SETUP CARD ─────────────────────────────────── */}
-      <Card className="p-6 border-dashed border-2 border-amber-200 bg-amber-50/30">
-        <SectionLabel icon={<Clock className="w-4 h-4 text-amber-500" />} title="Database Setup Required" subtitle="Action Required" />
-        <p className="text-[11px] text-[#64748B] mb-3 leading-relaxed">
-          Run the SQL below in your <strong>Supabase SQL Editor</strong> to create the <code className="bg-amber-100 px-1 rounded text-amber-700">apk_download_logs</code> table and start collecting offline-synced statistics.
-        </p>
-        <pre className="bg-[#1E293B] text-emerald-300 text-[10px] font-mono p-4 rounded-xl overflow-x-auto leading-relaxed whitespace-pre">
-{`-- Create APK Download Logs table
--- Designed for Offline-First: data collected only during server sync
-CREATE TABLE IF NOT EXISTS apk_download_logs (
-  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  package_name    TEXT NOT NULL,
-  version_name    TEXT NOT NULL,
-  version_code    INTEGER NOT NULL DEFAULT 1,
-  device_id       TEXT,
-  android_version TEXT,
-  manufacturer    TEXT,
-  device_model    TEXT,
-  architecture    TEXT,
-  screen_density  TEXT,
-  download_source TEXT DEFAULT 'CLOUDFLARE_CDN',
-  status          TEXT DEFAULT 'SUCCESS'
-                  CHECK (status IN ('SUCCESS','FAILED','PENDING')),
-  downloaded_at   TIMESTAMPTZ DEFAULT NOW(),
-  installed_at    TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Performance indexes for large-scale queries
-CREATE INDEX IF NOT EXISTS idx_dl_package ON apk_download_logs(package_name);
-CREATE INDEX IF NOT EXISTS idx_dl_version ON apk_download_logs(version_name);
-CREATE INDEX IF NOT EXISTS idx_dl_date    ON apk_download_logs(downloaded_at DESC);
-CREATE INDEX IF NOT EXISTS idx_dl_device  ON apk_download_logs(device_id);
-CREATE INDEX IF NOT EXISTS idx_dl_status  ON apk_download_logs(status);`}
-        </pre>
-      </Card>
 
     </div>
   );

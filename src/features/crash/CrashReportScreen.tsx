@@ -26,18 +26,6 @@ const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) => (
   <div className={`animate-pulse bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 rounded-lg ${className}`} />
 );
 
-// ─── Section Label Component ─────────────────────────────────
-const SectionLabel: React.FC<{ icon: React.ReactNode; title: string; subtitle?: string }> = ({
-  icon, title, subtitle
-}) => (
-  <div className="flex items-center space-x-2 mb-5">
-    <span className="text-[#0EA5E9]">{icon}</span>
-    <div>
-      <p className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest">{subtitle ?? 'Analytics'}</p>
-      <h3 className="text-sm font-black text-[#1E293B] tracking-tight">{title}</h3>
-    </div>
-  </div>
-);
 
 // ─── KPI Card Component ──────────────────────────────────────
 const KpiCard: React.FC<{
@@ -561,66 +549,6 @@ export const CrashReportScreen: React.FC = () => {
         </div>
 
       </div>
-
-      {/* ── SQL SETUP CARD ─────────────────────────────────── */}
-      <Card className="p-6 border-dashed border-2 border-indigo-200 bg-indigo-50/20">
-        <SectionLabel icon={<Terminal className="w-4 h-4 text-indigo-500" />} title="Database Configuration Schema" subtitle="Action Required" />
-        <p className="text-[11px] text-[#64748B] mb-3 leading-relaxed">
-          Salin dan jalankan perintah SQL berikut di **Supabase SQL Editor** Anda untuk melengkapi infrastruktur database pelaporan crash (`crash_issues`, `crash_reports`, dan `crash_comments`):
-        </p>
-        <pre className="bg-[#1E293B] text-emerald-300 text-[10px] font-mono p-4 rounded-xl overflow-x-auto leading-relaxed whitespace-pre">
-{`-- 1. Tabel Master Isu Grouping
-CREATE TABLE IF NOT EXISTS crash_issues (
-  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title             TEXT NOT NULL,
-  exception_type    TEXT NOT NULL,
-  exception_message TEXT NOT NULL,
-  package_name      TEXT NOT NULL,
-  severity          TEXT NOT NULL CHECK (severity IN ('FATAL', 'NON_FATAL', 'ANR', 'CRITICAL')),
-  occurrences       INTEGER DEFAULT 1,
-  affected_devices  INTEGER DEFAULT 1,
-  first_seen        TIMESTAMPTZ DEFAULT NOW(),
-  last_seen         TIMESTAMPTZ DEFAULT NOW(),
-  status            TEXT DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'INVESTIGATING', 'RESOLVED', 'IGNORED', 'ARCHIVED')),
-  notes             TEXT,
-  created_at        TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 2. Tabel Laporan Detail Crash dari Perangkat
-CREATE TABLE IF NOT EXISTS crash_reports (
-  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  issue_id          UUID REFERENCES crash_issues(id) ON DELETE CASCADE,
-  package_name      TEXT NOT NULL,
-  app_name          TEXT NOT NULL,
-  app_version       TEXT NOT NULL,
-  version_code      INTEGER NOT NULL,
-  severity          TEXT NOT NULL CHECK (severity IN ('FATAL', 'NON_FATAL', 'ANR', 'CRITICAL')),
-  exception_type    TEXT NOT NULL,
-  exception_message TEXT NOT NULL,
-  stack_trace       TEXT NOT NULL,
-  device_id         TEXT NOT NULL,
-  device_info       JSONB NOT NULL,
-  license_id        TEXT,
-  customer_id       TEXT,
-  created_at        TIMESTAMPTZ DEFAULT NOW(),
-  synced_at         TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 3. Tabel Kolaborasi Diskusi Tim Developer
-CREATE TABLE IF NOT EXISTS crash_comments (
-  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  issue_id          UUID REFERENCES crash_issues(id) ON DELETE CASCADE,
-  author            TEXT NOT NULL,
-  comment           TEXT NOT NULL,
-  created_at        TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Index Kecepatan Baca Diagnostik
-CREATE INDEX IF NOT EXISTS idx_ci_status ON crash_issues(status);
-CREATE INDEX IF NOT EXISTS idx_cr_issue_id ON crash_reports(issue_id);
-CREATE INDEX IF NOT EXISTS idx_cr_created_at ON crash_reports(created_at DESC);`}
-        </pre>
-      </Card>
 
     </div>
   );
