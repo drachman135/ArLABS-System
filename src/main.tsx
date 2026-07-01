@@ -124,3 +124,28 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// ── Register Service Worker for PWA install support ─────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((registration) => {
+        console.log('[ArLABS PWA] Service Worker registered, scope:', registration.scope);
+
+        // Check for SW updates silently
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[ArLABS PWA] New version available, will update on next reload.');
+              }
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn('[ArLABS PWA] Service Worker registration failed:', err);
+      });
+  });
+}

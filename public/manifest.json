@@ -1,0 +1,54 @@
+{
+  "name": "ArLABS Admin System Panel",
+  "short_name": "ArLABS Admin",
+  "description": "Panel administrasi terpusat untuk ekosistem aplikasi Android ArLABS Offline-First",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F0F2F5",
+  "theme_color": "#0EA5E9",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["productivity", "business", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Analytics Dashboard",
+      "short_name": "Analytics",
+      "description": "Lihat analytics ekosistem",
+      "url": "/",
+      "icons": [
+        {
+          "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

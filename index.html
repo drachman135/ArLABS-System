@@ -1,32 +1,44 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    
-    <!-- PWA Primary Metadata -->
-    <meta name="theme-color" content="#1e1e2e" />
-    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- ── SEO & Description ─────────────────────────────── -->
+    <title>ArLABS Admin Panel</title>
+    <meta name="description" content="Panel administrasi terpusat untuk ekosistem aplikasi Android ArLABS Offline-First. Kelola lisensi, perangkat, pembaruan OTA, pengumuman, notifikasi, dan analitik." />
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- ── PWA Manifest ──────────────────────────────────── -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- ── Theme & Color ─────────────────────────────────── -->
+    <meta name="theme-color" content="#0EA5E9" />
+    <meta name="msapplication-navbutton-color" content="#0EA5E9" />
+    <meta name="msapplication-TileColor" content="#0EA5E9" />
+    <meta name="msapplication-TileImage" content="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png" />
+
+    <!-- ── Apple iOS PWA ─────────────────────────────────── -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ArLABS Admin" />
-    <link rel="apple-touch-icon" href="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png" />
-    
-    <link rel="manifest" href="/src/manifest.json" />
+    <link rel="apple-touch-icon" sizes="192x192" href="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-512.png" />
 
-    <!-- Google Fonts for premium Material 3 typography -->
+    <!-- ── Android Chrome ────────────────────────────────── -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- ── Favicon ───────────────────────────────────────── -->
+    <link rel="icon" type="image/png" sizes="192x192" href="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png" />
+    <link rel="shortcut icon" href="https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png" />
+
+    <!-- ── Google Fonts ──────────────────────────────────── -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-
-    <title>ArLABS Admin System Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
   </head>
   <body class="bg-background text-textPrimary antialiased selection:bg-accent selection:text-background">
     <div id="root"></div>
-    <!-- Register Service Worker -->
-    <script type="module" src="/src/registerSW.ts"></script>
-    <!-- App entry point -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
