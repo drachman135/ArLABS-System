@@ -8,6 +8,7 @@ import { NotificationScreen } from '../notifications/NotificationScreen';
 import { AnnouncementScreen } from '../announcements/AnnouncementScreen';
 import { RemoteConfigScreen } from '../config/RemoteConfigScreen';
 import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
+import { ApkStatsDashboard } from '../apkstats/ApkStatsDashboard';
 import { 
   RefreshCw, 
   Wifi,
@@ -29,7 +30,7 @@ interface LogEntry {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -200,6 +201,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 }`}
             >
               Analytics ✦
+            </button>
+            <button
+              onClick={() => setActiveView('apkstats')}
+              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'apkstats'
+                  ? 'bg-gradient-to-r from-[#F59E0B] to-[#EF4444] text-white shadow-[2px_2px_8px_rgba(245,158,11,0.35)]'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
+                }`}
+            >
+              APK Stats ↓
             </button>
             <button
               onClick={() => setActiveView('licenses')}
@@ -476,6 +486,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         // RENDER ANALYTICS DASHBOARD
         <main className="max-w-7xl mx-auto">
           <AnalyticsDashboard />
+        </main>
+      ) : activeView === 'apkstats' ? (
+        // RENDER APK DOWNLOAD STATISTICS MODULE
+        <main className="max-w-7xl mx-auto">
+          <ApkStatsDashboard />
         </main>
       ) : activeView === 'licenses' ? (
         // RENDER LICENSE SCREEN TABLE WORKSPACE
