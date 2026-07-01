@@ -8,7 +8,7 @@ interface Application {
   package_name: string;
   current_version: string;
   min_supported_version?: string;
-  status: 'PRODUCTION_ACTIVE' | 'MAINTENANCE_MODE' | 'DEPRECATED';
+  status: 'ACTIVE' | 'MAINTENANCE' | 'DEPRECATED';
   force_update_required?: boolean;
   download_url?: string;
   release_notes?: string;
@@ -22,7 +22,7 @@ export const AppManagementScreen: React.FC = () => {
   
   // Edit state fields
   const [editVersion, setEditVersion] = useState<string>('');
-  const [editStatus, setEditStatus] = useState<Application['status']>('PRODUCTION_ACTIVE');
+  const [editStatus, setEditStatus] = useState<Application['status']>('ACTIVE');
   
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
 
@@ -31,7 +31,7 @@ export const AppManagementScreen: React.FC = () => {
   const [newAppName, setNewAppName] = useState<string>('');
   const [newPackageName, setNewPackageName] = useState<string>('');
   const [newVersion, setNewVersion] = useState<string>('');
-  const [newStatus, setNewStatus] = useState<Application['status']>('PRODUCTION_ACTIVE');
+  const [newStatus, setNewStatus] = useState<Application['status']>('ACTIVE');
   const [createLoading, setCreateLoading] = useState<boolean>(false);
 
   // Fetch applications list
@@ -60,7 +60,7 @@ export const AppManagementScreen: React.FC = () => {
           package_name: 'com.arlabs.client', 
           current_version: '1.0.4', 
           min_supported_version: '1.0.0', 
-          status: 'PRODUCTION_ACTIVE', 
+          status: 'ACTIVE', 
           force_update_required: false, 
           download_url: 'https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/apks/arlabs-client-v1.0.4.apk',
           release_notes: 'Initial production build deployment with offline caching services.',
@@ -72,7 +72,7 @@ export const AppManagementScreen: React.FC = () => {
           package_name: 'com.arlabs.pos', 
           current_version: '2.1.0', 
           min_supported_version: '2.0.0', 
-          status: 'MAINTENANCE_MODE', 
+          status: 'MAINTENANCE', 
           force_update_required: true, 
           download_url: 'https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/apks/arlabs-pos-v2.1.0.apk',
           release_notes: 'Scheduled database indexing and multi-tenant RLS hardening updates.',
@@ -179,7 +179,7 @@ export const AppManagementScreen: React.FC = () => {
       setNewAppName('');
       setNewPackageName('');
       setNewVersion('');
-      setNewStatus('PRODUCTION_ACTIVE');
+      setNewStatus('ACTIVE');
       setShowAddModal(false);
     } catch (err: any) {
       console.error('Failed to register new application:', err);
@@ -239,8 +239,8 @@ export const AppManagementScreen: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {apps.map((app) => {
-                const isActive = app.status === 'PRODUCTION_ACTIVE';
-                const isMaintenance = app.status === 'MAINTENANCE_MODE';
+                const isActive = app.status === 'ACTIVE';
+                const isMaintenance = app.status === 'MAINTENANCE';
                 let badgeStyle = 'bg-gray-100 text-gray-500 border border-gray-200';
 
                 if (isActive) badgeStyle = 'bg-green-50 text-green-600 border border-green-100';
@@ -267,7 +267,7 @@ export const AppManagementScreen: React.FC = () => {
                         <span className="text-xs font-mono text-[#1E293B] font-bold">v{app.current_version}</span>
                       </div>
                       <span className={`px-2.5 py-0.5 rounded-full text-[8px] font-bold tracking-wide uppercase ${badgeStyle}`}>
-                        {app.status === 'PRODUCTION_ACTIVE' ? 'ACTIVE' : app.status}
+                        {app.status === 'ACTIVE' ? 'ACTIVE' : app.status}
                       </span>
                     </div>
                   </div>
@@ -299,7 +299,7 @@ export const AppManagementScreen: React.FC = () => {
                   Deployment Status
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(['PRODUCTION_ACTIVE', 'MAINTENANCE_MODE', 'DEPRECATED'] as const).map((stat) => (
+                  {(['ACTIVE', 'MAINTENANCE', 'DEPRECATED'] as const).map((stat) => (
                     <button
                       key={stat}
                       type="button"
@@ -310,11 +310,11 @@ export const AppManagementScreen: React.FC = () => {
                           : 'bg-white border-gray-200 text-[#64748B] hover:text-[#1E293B] hover:bg-gray-50'
                       }`}
                     >
-                      {stat === 'PRODUCTION_ACTIVE' ? 'Active' : stat.split('_')[0]}
+                      {stat === 'ACTIVE' ? 'Active' : stat}
                     </button>
                   ))}
                 </div>
-                {editStatus === 'MAINTENANCE_MODE' && (
+                {editStatus === 'MAINTENANCE' && (
                   <div className="flex items-start space-x-2 bg-yellow-50 border border-yellow-200 p-2.5 rounded-lg text-[9px] text-yellow-700">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                     <span>Warning: Setting this status will activate the remote kill-switch overlay on client boots.</span>
@@ -422,7 +422,7 @@ export const AppManagementScreen: React.FC = () => {
                   Status Deploy
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(['PRODUCTION_ACTIVE', 'MAINTENANCE_MODE', 'DEPRECATED'] as const).map((stat) => (
+                  {(['ACTIVE', 'MAINTENANCE', 'DEPRECATED'] as const).map((stat) => (
                     <button
                       key={stat}
                       type="button"
@@ -433,7 +433,7 @@ export const AppManagementScreen: React.FC = () => {
                           : 'bg-white border-gray-200 text-[#64748B] hover:text-[#1E293B] hover:bg-gray-50'
                       }`}
                     >
-                      {stat === 'PRODUCTION_ACTIVE' ? 'Active' : stat.split('_')[0]}
+                      {stat === 'ACTIVE' ? 'Active' : stat}
                     </button>
                   ))}
                 </div>
