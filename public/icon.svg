@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Premium Gradient Background -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0EA5E9" />
+      <stop offset="100%" stop-color="#6366F1" />
+    </linearGradient>
+    <!-- Soft Drop Shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="4" dy="10" stdDeviation="12" flood-color="#1E1B4B" flood-opacity="0.35" />
+    </filter>
+  </defs>
+  
+  <!-- Rounded Base Canvas (Maskable Safe Area Compliant) -->
+  <rect width="512" height="512" rx="112" fill="url(#bg-grad)" />
+  
+  <!-- Logo Glyph Layer -->
+  <g filter="url(#shadow)">
+    <!-- Tech Ring -->
+    <circle cx="256" cy="256" r="140" fill="none" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-dasharray="600 200" transform="rotate(-45 256 256)" />
+    
+    <!-- Stylized "Ar" Lettermark -->
+    <text x="256" y="295" font-family="'Outfit', 'Inter', system-ui, sans-serif" font-size="140" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="-4">
+      Ar
+    </text>
+  </g>
+  
+  <!-- Micro Dot Tech Accents -->
+  <circle cx="256" cy="116" r="14" fill="#38BDF8" />
+</svg>

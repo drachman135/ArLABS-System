@@ -11,32 +11,19 @@
   "lang": "id",
   "icons": [
     {
-      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192",
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
       "purpose": "any"
     },
     {
-      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "maskable"
-    },
-    {
-      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any"
-    },
-    {
-      "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512",
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
       "purpose": "maskable"
     }
   ],
   "categories": ["productivity", "business", "utilities"],
-  "screenshots": [],
   "shortcuts": [
     {
       "name": "Analytics Dashboard",
@@ -45,7 +32,7 @@
       "url": "/",
       "icons": [
         {
-          "src": "https://dpthhttwmtgtbrsjtfcg.supabase.co/storage/v1/object/public/assets/icon-192.png",
+          "src": "/icon.svg",
           "sizes": "192x192"
         }
       ]
