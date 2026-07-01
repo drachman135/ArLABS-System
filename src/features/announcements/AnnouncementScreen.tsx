@@ -15,7 +15,7 @@ interface Announcement {
   id: string;
   title: string;
   content: string;
-  type: 'POPUP' | 'BANNER';
+  type: 'CARD' | 'MODAL' | 'IMAGE_ONLY' | 'TOP_BANNER';
   image_url: string | null;
   start_date: string;
   end_date: string;
@@ -37,7 +37,7 @@ export const AnnouncementScreen: React.FC = () => {
   // Form states
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
-  const [type, setType] = useState<'POPUP' | 'BANNER'>('POPUP');
+  const [type, setType] = useState<'CARD' | 'MODAL' | 'IMAGE_ONLY' | 'TOP_BANNER'>('CARD');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -258,7 +258,7 @@ export const AnnouncementScreen: React.FC = () => {
       // Reset form fields
       setTitle('');
       setContent('');
-      setType('POPUP');
+      setType('CARD');
       setImageFile(null);
       setStartDate('');
       setEndDate('');
@@ -433,8 +433,10 @@ export const AnnouncementScreen: React.FC = () => {
                   onChange={(e) => setType(e.target.value as any)}
                   className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] cursor-pointer shadow-sm font-bold"
                 >
-                  <option value="POPUP">POPUP CARD</option>
-                  <option value="BANNER">BANNER NOTIFICATION</option>
+                  <option value="CARD">CARD LAYOUT</option>
+                  <option value="MODAL">MODAL DIALOG</option>
+                  <option value="IMAGE_ONLY">IMAGE ONLY</option>
+                  <option value="TOP_BANNER">TOP BANNER</option>
                 </select>
               </div>
 
@@ -584,11 +586,17 @@ export const AnnouncementScreen: React.FC = () => {
                   ) : (
                     announcements.map((ann, idx) => {
                       const status = getStatusText(ann.start_date, ann.end_date);
-                      const isPopup = ann.type === 'POPUP';
-
-                      const typeBadge = isPopup 
-                        ? 'bg-purple-50 text-purple-600 border border-purple-100'
-                        : 'bg-indigo-50 text-indigo-600 border border-indigo-100';
+                      
+                      let typeBadge = 'bg-gray-50 text-gray-600 border border-gray-100';
+                      if (ann.type === 'CARD') {
+                        typeBadge = 'bg-purple-50 text-purple-600 border border-purple-100';
+                      } else if (ann.type === 'MODAL') {
+                        typeBadge = 'bg-indigo-50 text-indigo-600 border border-indigo-100';
+                      } else if (ann.type === 'IMAGE_ONLY') {
+                        typeBadge = 'bg-emerald-50 text-emerald-600 border border-emerald-100';
+                      } else if (ann.type === 'TOP_BANNER') {
+                        typeBadge = 'bg-amber-50 text-amber-600 border border-amber-100';
+                      }
 
                       const statusBadge = status === 'ACTIVE'
                         ? 'bg-green-50 text-green-600 border border-green-100'
@@ -698,41 +706,74 @@ export const AnnouncementScreen: React.FC = () => {
                 Android Device Mockup
               </span>
 
-              {type === 'POPUP' ? (
-                // POPUP LAYOUT PREVIEW
+              {type === 'CARD' ? (
+                // CARD LAYOUT PREVIEW
                 <div className="w-full max-w-[260px] bg-white rounded-2xl shadow-xl overflow-hidden animate-fade-in flex flex-col">
                   {imagePreviewUrl && (
                     <img 
                       src={imagePreviewUrl} 
-                      alt="Popup preview image" 
+                      alt="Card layout preview" 
                       className="w-full h-32 object-cover border-b border-gray-100" 
                     />
                   )}
                   <div className="p-4 space-y-2 text-left">
-                    <h5 className="text-xs font-black text-[#1E293B] tracking-tight">{title || 'Announcement Title'}</h5>
-                    <p className="text-[10px] text-gray-600 leading-normal max-h-[80px] overflow-y-auto whitespace-pre-wrap">{content || 'Description content text...'}</p>
-                    <button 
-                      type="button"
-                      disabled
-                      className="w-full bg-[#0EA5E9] text-white font-bold text-[9px] py-2 rounded-lg mt-1 uppercase"
-                    >
-                      Tutup
-                    </button>
+                    <h5 className="text-xs font-black text-[#1E293B] tracking-tight">{title || 'Card Title'}</h5>
+                    <p className="text-[10px] text-gray-600 leading-normal max-h-[80px] overflow-y-auto whitespace-pre-wrap">{content || 'Card body content...'}</p>
+                    <div className="flex space-x-2 pt-1">
+                      <button type="button" disabled className="flex-1 bg-gray-100 text-gray-700 font-bold text-[9px] py-1.5 rounded-lg uppercase">Tutup</button>
+                      <button type="button" disabled className="flex-1 bg-[#0EA5E9] text-white font-bold text-[9px] py-1.5 rounded-lg uppercase">Buka</button>
+                    </div>
                   </div>
                 </div>
+              ) : type === 'MODAL' ? (
+                // MODAL LAYOUT PREVIEW
+                <div className="w-full max-w-[250px] bg-white rounded-2xl shadow-2xl p-4 animate-scale-up text-center space-y-3">
+                  <h5 className="text-xs font-black text-[#1E293B] uppercase tracking-wider">{title || 'Modal Title'}</h5>
+                  {imagePreviewUrl ? (
+                    <img 
+                      src={imagePreviewUrl} 
+                      alt="Modal preview image" 
+                      className="w-full h-28 object-cover rounded-lg shadow-sm" 
+                    />
+                  ) : (
+                    <div className="w-full h-20 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-[10px]">No Image Provided</div>
+                  )}
+                  <p className="text-[9px] text-gray-600 leading-relaxed max-h-[60px] overflow-y-auto whitespace-pre-wrap">{content || 'Modal content body details...'}</p>
+                  <div className="flex space-x-2 pt-1">
+                    <button type="button" disabled className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold text-[9px] py-2 rounded-lg uppercase">Tutup</button>
+                    <button type="button" disabled className="flex-1 bg-[#0EA5E9] text-white font-bold text-[9px] py-2 rounded-lg uppercase">Buka</button>
+                  </div>
+                </div>
+              ) : type === 'IMAGE_ONLY' ? (
+                // IMAGE ONLY LAYOUT PREVIEW
+                <div className="w-full max-w-[230px] bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-up relative">
+                  {imagePreviewUrl ? (
+                    <img 
+                      src={imagePreviewUrl} 
+                      alt="Image only layout preview" 
+                      className="w-full h-56 object-cover" 
+                    />
+                  ) : (
+                    <div className="w-full h-48 bg-gray-100 flex flex-col items-center justify-center text-gray-400 text-xs p-4">
+                      <ImageIcon className="w-8 h-8 mb-2" />
+                      <span>No image selected</span>
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-black/50 flex items-center justify-center text-[10px] text-white font-bold">X</div>
+                </div>
               ) : (
-                // BANNER LAYOUT PREVIEW
-                <div className="w-full max-w-[320px] bg-white/95 backdrop-blur-md border border-white/20 p-3.5 rounded-xl shadow-lg flex items-center space-x-3 text-left animate-fade-in absolute top-8 left-1/2 -translate-x-1/2">
+                // TOP BANNER LAYOUT PREVIEW
+                <div className="w-full max-w-[300px] bg-white/95 backdrop-blur-md border border-white/20 p-3 rounded-xl shadow-lg flex items-center space-x-3 text-left animate-fade-in absolute top-6 left-1/2 -translate-x-1/2">
                   {imagePreviewUrl && (
                     <img 
                       src={imagePreviewUrl} 
                       alt="Banner thumbnail" 
-                      className="w-10 h-10 rounded-lg object-cover flex-shrink-0" 
+                      className="w-9 h-9 rounded-lg object-cover flex-shrink-0" 
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <h5 className="text-[11px] font-black text-[#1E293B] truncate leading-tight">{title || 'Banner Title'}</h5>
-                    <p className="text-[9px] text-gray-600 truncate leading-snug">{content || 'Description snippet content...'}</p>
+                    <h5 className="text-[10px] font-black text-[#1E293B] truncate leading-tight">{title || 'Banner Title'}</h5>
+                    <p className="text-[9px] text-gray-600 truncate leading-snug">{content || 'Banner snippet text...'}</p>
                   </div>
                   <div className="w-1.5 h-1.5 rounded-full bg-[#0EA5E9] animate-pulse" />
                 </div>
