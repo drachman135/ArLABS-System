@@ -20,6 +20,13 @@ interface Announcement {
   start_date: string;
   end_date: string;
   created_at: string;
+  target_type: 'ALL' | 'APP';
+  target_id: string | null;
+}
+
+interface ApplicationOption {
+  package_name: string;
+  app_name: string;
 }
 
 export const AnnouncementScreen: React.FC = () => {
@@ -36,6 +43,11 @@ export const AnnouncementScreen: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [dragActive, setDragActive] = useState<boolean>(false);
 
+  // Target application states
+  const [targetType, setTargetType] = useState<'ALL' | 'APP'>('ALL');
+  const [targetId, setTargetId] = useState<string>('');
+  const [apps, setApps] = useState<ApplicationOption[]>([]);
+
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
@@ -50,6 +62,19 @@ export const AnnouncementScreen: React.FC = () => {
 
     return () => URL.revokeObjectURL(objectUrl);
   }, [imageFile]);
+
+  // Fetch applications list for package filtering
+  const fetchDropdownData = async () => {
+    try {
+      const { data: appData } = await supabase
+        .from('applications')
+        .select('package_name, app_name')
+        .order('app_name', { ascending: true });
+      if (appData) setApps(appData);
+    } catch (err) {
+      console.error("Failed to fetch applications for dropdown:", err);
+    }
+  };
 
   // Fetch announcements list
   const fetchAnnouncements = async () => {
@@ -70,9 +95,63 @@ export const AnnouncementScreen: React.FC = () => {
     }
   };
 
+  // Synchronize all announcements to Cloudflare R2 as a static JSON file
+  const syncAnnouncementsToCloudflare = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const workerUrl = (import.meta as any).env?.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+      const uploadSecret = (import.meta as any).env?.VITE_CLOUDFLARE_UPLOAD_SECRET;
+
+      if (!uploadSecret) {
+        console.error("Cloudflare upload secret not configured. Skipping JSON sync.");
+        return;
+      }
+
+      // Convert announcements list to a JSON file blob
+      const blob = new Blob([JSON.stringify(data || [])], { type: 'application/json' });
+      const file = new File([blob], 'announcements.json', { type: 'application/json' });
+
+      const uploadUrl = new URL(workerUrl);
+      uploadUrl.searchParams.set('filename', 'announcements.json');
+
+      const response = await fetch(uploadUrl.toString(), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${uploadSecret}`
+        },
+        body: file
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Sync worker failed: ${errText}`);
+      }
+
+      console.log("Successfully synchronized announcements.json to Cloudflare R2.");
+    } catch (err) {
+      console.error("Failed to sync announcements to Cloudflare:", err);
+    }
+  };
+
   useEffect(() => {
     fetchAnnouncements();
+    fetchDropdownData();
   }, []);
+
+  // Update targetId state when targetType is changed or apps are loaded
+  useEffect(() => {
+    if (targetType === 'APP' && apps.length > 0) {
+      setTargetId(apps[0].package_name);
+    } else {
+      setTargetId('');
+    }
+  }, [targetType, apps]);
 
   // Handle file drop
   const handleDrag = (e: React.DragEvent) => {
@@ -117,25 +196,40 @@ export const AnnouncementScreen: React.FC = () => {
     try {
       let imageUrl: string | null = null;
 
-      // Step 1: Upload image if selected
+      // Step 1: Upload image if selected to Cloudflare R2
       if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('notification-images')
-          .upload(fileName, imageFile);
+        const workerUrl = (import.meta as any).env?.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+        const uploadSecret = (import.meta as any).env?.VITE_CLOUDFLARE_UPLOAD_SECRET;
 
-        if (uploadError) {
-          console.error("Supabase Storage Upload Error:", uploadError);
-          throw uploadError;
+        if (!uploadSecret) {
+          throw new Error("Kunci rahasia VITE_CLOUDFLARE_UPLOAD_SECRET belum dikonfigurasi di file .env.local.");
         }
 
-        const { data: publicUrlData } = supabase.storage
-          .from('notification-images')
-          .getPublicUrl(fileName);
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `announcement-${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+        
+        const uploadUrl = new URL(workerUrl);
+        uploadUrl.searchParams.set('filename', fileName);
 
-        imageUrl = publicUrlData.publicUrl;
+        const uploadResponse = await fetch(uploadUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${uploadSecret}`
+          },
+          body: imageFile
+        });
+
+        if (!uploadResponse.ok) {
+          const errText = await uploadResponse.text();
+          throw new Error(`Gagal mengunggah gambar ke Cloudflare: ${errText}`);
+        }
+
+        const uploadData = await uploadResponse.json();
+        if (uploadData.success && uploadData.url) {
+          imageUrl = uploadData.url;
+        } else {
+          throw new Error(uploadData.error || "Gagal mendapatkan URL gambar dari Cloudflare");
+        }
       }
 
       // Step 2: Insert complete record into announcements table
@@ -148,7 +242,9 @@ export const AnnouncementScreen: React.FC = () => {
             type,
             image_url: imageUrl,
             start_date: new Date(startDate).toISOString(),
-            end_date: new Date(endDate).toISOString()
+            end_date: new Date(endDate).toISOString(),
+            target_type: targetType,
+            target_id: targetType === 'ALL' ? null : targetId || null
           }
         ]);
 
@@ -166,9 +262,12 @@ export const AnnouncementScreen: React.FC = () => {
       setImageFile(null);
       setStartDate('');
       setEndDate('');
+      setTargetType('ALL');
+      setTargetId('');
 
-      // Refresh list
+      // Refresh list and sync JSON to Cloudflare
       await fetchAnnouncements();
+      await syncAnnouncementsToCloudflare();
     } catch (err: any) {
       console.error("Gagal membuat pengumuman:", err);
       alert(`Gagal membuat pengumuman: ${err.message || 'Kesalahan jaringan'}`);
@@ -183,8 +282,8 @@ export const AnnouncementScreen: React.FC = () => {
     if (!confirmDelete) return;
 
     try {
-      // Step 1: Delete associated image from Supabase storage if applicable
-      if (ann.image_url) {
+      // Step 1: Delete associated image from Supabase storage if applicable (backward compatibility for old images)
+      if (ann.image_url && ann.image_url.includes('supabase.co')) {
         const fileName = ann.image_url.substring(ann.image_url.lastIndexOf('/') + 1);
         await supabase.storage
           .from('notification-images')
@@ -203,8 +302,9 @@ export const AnnouncementScreen: React.FC = () => {
 
       alert("Pengumuman berhasil dihapus!");
       
-      // Refresh list
+      // Refresh list and sync JSON to Cloudflare
       await fetchAnnouncements();
+      await syncAnnouncementsToCloudflare();
     } catch (err: any) {
       console.error("Gagal menghapus pengumuman:", err);
       alert(`Gagal menghapus pengumuman: ${err.message}`);
@@ -237,7 +337,7 @@ export const AnnouncementScreen: React.FC = () => {
         </div>
 
         <button
-          onClick={fetchAnnouncements}
+          onClick={() => { fetchAnnouncements(); fetchDropdownData(); }}
           className="border border-white bg-white hover:border-[#0EA5E9]/50 hover:bg-[#0EA5E9]/10 text-[#1E293B] hover:text-[#0EA5E9] p-2.5 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
         >
           <RefreshCw className="w-4 h-4" />
@@ -284,6 +384,42 @@ export const AnnouncementScreen: React.FC = () => {
                 onChange={(e) => setContent(e.target.value)}
                 className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm resize-none"
               />
+            </div>
+
+            {/* Target Scope Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="space-y-2">
+                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
+                  Target Scope
+                </label>
+                <select
+                  value={targetType}
+                  onChange={(e) => setTargetType(e.target.value as any)}
+                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] cursor-pointer shadow-sm font-bold"
+                >
+                  <option value="ALL">ALL DEVICES</option>
+                  <option value="APP">SPECIFIC PACKAGE</option>
+                </select>
+              </div>
+
+              {targetType === 'APP' && (
+                <div className="space-y-2 animate-fade-in">
+                  <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
+                    Select Application Package
+                  </label>
+                  <select
+                    value={targetId}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] cursor-pointer shadow-sm font-bold font-mono"
+                  >
+                    {apps.map((app) => (
+                      <option key={app.package_name} value={app.package_name}>
+                        {app.app_name} [{app.package_name}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Type & File picker grid */}
@@ -422,6 +558,7 @@ export const AnnouncementScreen: React.FC = () => {
                 <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
                   <tr>
                     <th className="py-4 px-6">Announcement Title</th>
+                    <th className="py-4 px-6">Target Scope</th>
                     <th className="py-4 px-6">Type</th>
                     <th className="py-4 px-6">Active Range</th>
                     <th className="py-4 px-6">Status</th>
@@ -431,7 +568,7 @@ export const AnnouncementScreen: React.FC = () => {
                 <tbody className="divide-y divide-gray-100 text-[#1E293B]">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-[#64748B]">
+                      <td colSpan={6} className="py-12 text-center text-[#64748B]">
                         <div className="flex items-center justify-center space-x-2">
                           <Loader2 className="w-4 h-4 animate-spin text-[#0EA5E9]" />
                           <span>FETCHING_ANNOUNCEMENT_RECORDS...</span>
@@ -440,7 +577,7 @@ export const AnnouncementScreen: React.FC = () => {
                     </tr>
                   ) : announcements.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
+                      <td colSpan={6} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
                         NO_ANNOUNCEMENT_RECORDS_FOUND
                       </td>
                     </tr>
@@ -477,6 +614,17 @@ export const AnnouncementScreen: React.FC = () => {
                                 </a>
                               )}
                             </div>
+                          </td>
+
+                          {/* Target Scope */}
+                          <td className="py-4 px-6 font-mono text-[10px] text-[#64748B] font-bold">
+                            {ann.target_type === 'ALL' ? (
+                              <span className="text-gray-400">ALL</span>
+                            ) : (
+                              <span className="text-[#0EA5E9]" title={ann.target_id || ''}>
+                                {ann.target_id ? (apps.find(a => a.package_name === ann.target_id)?.app_name || ann.target_id) : 'APP'}
+                              </span>
+                            )}
                           </td>
 
                           {/* Type */}
@@ -541,7 +689,7 @@ export const AnnouncementScreen: React.FC = () => {
             </div>
 
             <p className="text-xs text-[#64748B] leading-relaxed">
-              Silakan konfirmasi pratinjau tampilan pengumuman berikut sebelum dipublikasikan ke perangkat Android:
+              Silakan konfirmasi pratinjau tampilan pengumuman berikut sebelum dipublikasikan ke perangkat Android untuk target <span className="font-bold text-[#1E293B]">{targetType === 'ALL' ? 'Semua Aplikasi (ALL)' : `Aplikasi: ${apps.find(a => a.package_name === targetId)?.app_name || targetId}`}</span>:
             </p>
 
             {/* Live Preview Container (Mock Screen) */}
