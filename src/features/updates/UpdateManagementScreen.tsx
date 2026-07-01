@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../core/supabase';
-import { RefreshCw, Loader2, Cloud, Calendar, FileText, Server, UploadCloud, HelpCircle } from 'lucide-react';
+import { RefreshCw, Loader2, Cloud, Calendar, FileText, Server, UploadCloud, HelpCircle, Check, AlertTriangle } from 'lucide-react';
 
 interface AppUpdate {
   id: string;
@@ -34,6 +34,116 @@ export const UpdateManagementScreen: React.FC = () => {
 
   // Confirmation Modal
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+
+  // File upload states
+  const [useManualUrl, setUseManualUrl] = useState<boolean>(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [uploadErrorMsg, setUploadErrorMsg] = useState<string>('');
+  const [dragActive, setDragActive] = useState<boolean>(false);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith('.apk')) {
+        startUpload(file);
+      } else {
+        alert('Hanya berkas format .apk yang diperbolehkan!');
+      }
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      startUpload(e.target.files[0]);
+    }
+  };
+
+  const startUpload = (file: File) => {
+    // Max 100MB limit for Cloudflare Worker body
+    if (file.size > 100 * 1024 * 1024) {
+      setUploadStatus('ERROR');
+      setUploadErrorMsg('Ukuran file melebihi batas maksimal 100MB.');
+      return;
+    }
+
+    setUploadFile(file);
+    setUploadProgress(0);
+    setUploadStatus('UPLOADING');
+    setUploadErrorMsg('');
+
+    const workerUrl = (import.meta as any).env?.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+    const uploadSecret = (import.meta as any).env?.VITE_CLOUDFLARE_UPLOAD_SECRET;
+
+    if (!uploadSecret || uploadSecret === 'YOUR_UPLOAD_SECRET_HERE') {
+      setUploadStatus('ERROR');
+      setUploadErrorMsg('Kunci rahasia VITE_CLOUDFLARE_UPLOAD_SECRET belum dikonfigurasi di file .env.local.');
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    const uploadUrl = new URL(workerUrl);
+    uploadUrl.searchParams.set('filename', file.name);
+
+    xhr.open('POST', uploadUrl.toString(), true);
+    xhr.setRequestHeader('Authorization', `Bearer ${uploadSecret}`);
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percentComplete);
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success && response.url) {
+            setApkUrl(response.url);
+            setUploadStatus('SUCCESS');
+          } else {
+            throw new Error(response.error || 'Respons gagal dari server');
+          }
+        } catch (err: any) {
+          setUploadStatus('ERROR');
+          setUploadErrorMsg(`Gagal memproses respons: ${err?.message || 'Format tidak valid'}`);
+        }
+      } else {
+        setUploadStatus('ERROR');
+        setUploadErrorMsg(`Gagal mengunggah file (${xhr.status}): ${xhr.statusText || 'Kesalahan jaringan'}`);
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      setUploadStatus('ERROR');
+      setUploadErrorMsg('Kesalahan jaringan saat menghubungi Cloudflare Worker.');
+    });
+
+    xhr.send(file);
+  };
+
+  const resetUpload = () => {
+    setUploadFile(null);
+    setUploadProgress(0);
+    setUploadStatus('IDLE');
+    setUploadErrorMsg('');
+    setApkUrl('');
+  };
 
   // Fetch applications list for dynamic dropdown
   const fetchAppsDropdown = async () => {
@@ -216,19 +326,110 @@ export const UpdateManagementScreen: React.FC = () => {
               </select>
             </div>
 
-            {/* Cloudflare CDN Url */}
+            {/* Cloudflare CDN Url with File Uploader */}
             <div className="space-y-2">
-              <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
-                Cloudflare CDN APK Storage Link
-              </label>
-              <input
-                type="url"
-                required
-                placeholder="https://cdn.arlabs.io/apk/release-v1.2.0.apk"
-                value={apkUrl}
-                onChange={(e) => setApkUrl(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] font-mono shadow-sm"
-              />
+              <div className="flex justify-between items-center">
+                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
+                  APK Binary File / Storage Link
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseManualUrl(!useManualUrl);
+                    resetUpload();
+                  }}
+                  className="text-[9px] text-[#0EA5E9] hover:underline font-bold"
+                >
+                  {useManualUrl ? 'Gunakan File Uploader' : 'Masukkan URL Manual'}
+                </button>
+              </div>
+
+              {useManualUrl ? (
+                <input
+                  type="url"
+                  required
+                  placeholder="https://cdn.arlabs.io/apk/release-v1.2.0.apk"
+                  value={apkUrl}
+                  onChange={(e) => setApkUrl(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] font-mono shadow-sm"
+                />
+              ) : (
+                <div 
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-[20px] p-6 text-center transition-all duration-300 ${
+                    dragActive 
+                      ? 'border-[#0EA5E9] bg-[#0EA5E9]/5' 
+                      : uploadStatus === 'SUCCESS'
+                        ? 'border-green-500 bg-green-50/20'
+                        : uploadStatus === 'ERROR'
+                          ? 'border-red-500 bg-red-50/20'
+                          : 'border-gray-200 bg-white/50 hover:border-[#0EA5E9]/50'
+                  }`}
+                >
+                  {uploadStatus === 'IDLE' && (
+                    <label className="cursor-pointer flex flex-col items-center space-y-2 py-2">
+                      <UploadCloud className="w-8 h-8 text-[#64748B] hover:text-[#0EA5E9] transition-colors" />
+                      <span className="text-xs font-bold text-[#1E293B]">Klik untuk cari berkas atau seret berkas ke sini</span>
+                      <span className="text-[9px] text-[#64748B] uppercase font-semibold">Format: .apk (Maks. 100MB)</span>
+                      <input 
+                        type="file" 
+                        accept=".apk"
+                        onChange={handleFileSelect}
+                        className="hidden" 
+                      />
+                    </label>
+                  )}
+
+                  {uploadStatus === 'UPLOADING' && (
+                    <div className="space-y-3 py-2">
+                      <div className="flex justify-between items-center text-xs font-semibold text-[#1E293B]">
+                        <span className="truncate max-w-[200px]">{uploadFile?.name}</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className="bg-[#0EA5E9] h-1.5 transition-all duration-300 rounded-full" 
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-[9px] text-[#64748B] uppercase tracking-wider animate-pulse">Mengunggah file ke Cloudflare R2...</p>
+                    </div>
+                  )}
+
+                  {uploadStatus === 'SUCCESS' && (
+                    <div className="flex flex-col items-center space-y-2">
+                      <Check className="w-8 h-8 text-green-500 animate-bounce" />
+                      <span className="text-xs font-bold text-green-600">Berhasil Diunggah!</span>
+                      <span className="text-[10px] text-[#64748B] truncate max-w-[300px] font-mono block">{apkUrl}</span>
+                      <button
+                        type="button"
+                        onClick={resetUpload}
+                        className="text-[9px] bg-white border border-gray-200 hover:border-gray-300 text-[#1E293B] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                      >
+                        Ganti File
+                      </button>
+                    </div>
+                  )}
+
+                  {uploadStatus === 'ERROR' && (
+                    <div className="flex flex-col items-center space-y-2">
+                      <AlertTriangle className="w-8 h-8 text-red-500 animate-pulse" />
+                      <span className="text-xs font-bold text-red-600">Gagal Mengunggah Berkas</span>
+                      <span className="text-[9px] text-red-500 max-w-[280px] leading-relaxed block">{uploadErrorMsg}</span>
+                      <button
+                        type="button"
+                        onClick={resetUpload}
+                        className="text-[9px] bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                      >
+                        Coba Lagi
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Version Metadata inputs */}
