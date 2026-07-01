@@ -9,6 +9,7 @@ import { AnnouncementScreen } from '../announcements/AnnouncementScreen';
 import { RemoteConfigScreen } from '../config/RemoteConfigScreen';
 import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
 import { ApkStatsDashboard } from '../apkstats/ApkStatsDashboard';
+import { CrashReportScreen } from '../crash/CrashReportScreen';
 import { 
   RefreshCw, 
   Wifi,
@@ -30,7 +31,7 @@ interface LogEntry {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -210,6 +211,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 }`}
             >
               APK Stats ↓
+            </button>
+            <button
+              onClick={() => setActiveView('crash')}
+              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'crash'
+                  ? 'bg-gradient-to-r from-[#EF4444] to-[#F43F5E] text-white shadow-[2px_2px_8px_rgba(239,68,68,0.35)]'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
+                }`}
+            >
+              Crash Reports ⚠️
             </button>
             <button
               onClick={() => setActiveView('licenses')}
@@ -491,6 +501,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         // RENDER APK DOWNLOAD STATISTICS MODULE
         <main className="max-w-7xl mx-auto">
           <ApkStatsDashboard />
+        </main>
+      ) : activeView === 'crash' ? (
+        // RENDER CRASH & ERROR REPORT MODULE
+        <main className="max-w-7xl mx-auto">
+          <CrashReportScreen />
         </main>
       ) : activeView === 'licenses' ? (
         // RENDER LICENSE SCREEN TABLE WORKSPACE
