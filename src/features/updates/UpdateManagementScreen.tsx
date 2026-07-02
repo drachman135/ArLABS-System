@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../core/supabase';
-import { RefreshCw, Loader2, Cloud, Calendar, FileText, Server, UploadCloud, HelpCircle, Check, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Loader2, Cloud, Calendar, FileText, Server, UploadCloud, HelpCircle, Check, AlertTriangle, X } from 'lucide-react';
 
 interface AppUpdate {
   id: string;
@@ -42,6 +42,7 @@ export const UpdateManagementScreen: React.FC = () => {
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [uploadErrorMsg, setUploadErrorMsg] = useState<string>('');
   const [dragActive, setDragActive] = useState<boolean>(false);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -96,6 +97,7 @@ export const UpdateManagementScreen: React.FC = () => {
     }
 
     const xhr = new XMLHttpRequest();
+    xhrRef.current = xhr;
     const uploadUrl = new URL(workerUrl);
     uploadUrl.searchParams.set('filename', file.name);
 
@@ -143,6 +145,18 @@ export const UpdateManagementScreen: React.FC = () => {
     setUploadStatus('IDLE');
     setUploadErrorMsg('');
     setApkUrl('');
+    xhrRef.current = null;
+  };
+
+  const cancelUpload = () => {
+    if (xhrRef.current) {
+      xhrRef.current.abort();
+      xhrRef.current = null;
+    }
+    setUploadFile(null);
+    setUploadProgress(0);
+    setUploadStatus('IDLE');
+    setUploadErrorMsg('');
   };
 
   // Fetch applications list for dynamic dropdown
@@ -386,7 +400,7 @@ export const UpdateManagementScreen: React.FC = () => {
                   {uploadStatus === 'UPLOADING' && (
                     <div className="space-y-3 py-2">
                       <div className="flex justify-between items-center text-xs font-semibold text-[#1E293B]">
-                        <span className="truncate max-w-[200px]">{uploadFile?.name}</span>
+                        <span className="truncate max-w-[180px]">{uploadFile?.name}</span>
                         <span>{uploadProgress}%</span>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
@@ -396,6 +410,14 @@ export const UpdateManagementScreen: React.FC = () => {
                         />
                       </div>
                       <p className="text-[9px] text-[#64748B] uppercase tracking-wider animate-pulse">Mengunggah file ke Cloudflare R2...</p>
+                      <button
+                        type="button"
+                        onClick={cancelUpload}
+                        className="flex items-center justify-center space-x-1.5 w-full text-[9px] bg-white border border-red-200 hover:bg-red-50 hover:border-red-400 text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded-lg transition-all duration-200 shadow-sm uppercase tracking-wider"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Batalkan Upload</span>
+                      </button>
                     </div>
                   )}
 
