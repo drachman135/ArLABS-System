@@ -13,7 +13,11 @@ import { CrashReportScreen } from '../crash/CrashReportScreen';
 import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
 import {   RefreshCw, 
   Wifi,
-  Database
+  Database,
+  X,
+  Key,
+  AlertTriangle,
+  Bell
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -111,6 +115,84 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     };
 
     initOneSignal();
+  }, []);
+
+  // Toast notifications state
+  interface ToastNotification {
+    id: string;
+    title: string;
+    body: string;
+    type: 'activation' | 'feedback' | 'default';
+  }
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  // Audio synthesis helper for real-time cues
+  const playNotificationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + 0.3);
+      
+      const oscillator2 = audioCtx.createOscillator();
+      const gainNode2 = audioCtx.createGain();
+      oscillator2.connect(gainNode2);
+      gainNode2.connect(audioCtx.destination);
+      oscillator2.type = 'sine';
+      oscillator2.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1); // A5
+      gainNode2.gain.setValueAtTime(0.1, audioCtx.currentTime + 0.1);
+      gainNode2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+      oscillator2.start(audioCtx.currentTime + 0.1);
+      oscillator2.stop(audioCtx.currentTime + 0.45);
+    } catch (e) {
+      console.error('Failed to play synthesizer sound:', e);
+    }
+  };
+
+  const addToast = (title: string, body: string) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    let type: ToastNotification['type'] = 'default';
+    if (title.includes('🔑') || title.toLowerCase().includes('aktif') || title.toLowerCase().includes('license')) {
+      type = 'activation';
+    } else if (title.includes('⚠️') || title.toLowerCase().includes('lap') || title.toLowerCase().includes('feed')) {
+      type = 'feedback';
+    }
+    
+    setToasts(prev => [...prev, { id, title, body, type }]);
+    playNotificationSound();
+    
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 6000);
+  };
+
+  // Real-time listener for client-driven events logged to notifications table
+  useEffect(() => {
+    const channel = supabase
+      .channel('global:notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
+        const newNotif = payload.new as any;
+        if (newNotif && newNotif.title) {
+          addToast(newNotif.title, newNotif.body || newNotif.message || '');
+          // Automatically refresh stats and log stream
+          fetchDashboardData();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Fetch metrics & check Supabase connectivity
@@ -648,6 +730,56 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         <RemoteConfigScreen />
       )}
 
+      {/* Premium In-App Toast Stack */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full pointer-events-none">
+        {toasts.map((t) => {
+          let icon = <Bell className="w-5 h-5 text-blue-500" />;
+          let borderStyle = 'border-blue-100';
+          let bgStyle = 'bg-white/95';
+          
+          if (t.type === 'activation') {
+            icon = <Key className="w-5 h-5 text-amber-500 animate-pulse" />;
+            borderStyle = 'border-amber-200';
+            bgStyle = 'bg-amber-50/95';
+          } else if (t.type === 'feedback') {
+            icon = <AlertTriangle className="w-5 h-5 text-red-500 animate-bounce" />;
+            borderStyle = 'border-red-200';
+            bgStyle = 'bg-red-50/95';
+          }
+
+          return (
+            <div
+              key={t.id}
+              className={`pointer-events-auto p-4 rounded-2xl shadow-xl border ${borderStyle} ${bgStyle} backdrop-blur-md flex items-start space-x-3 transition-all duration-500 transform translate-x-0 animate-[slideIn_0.3s_ease-out]`}
+            >
+              <div className="flex-shrink-0 mt-0.5">{icon}</div>
+              <div className="flex-grow min-w-0">
+                <h4 className="text-xs font-black text-slate-800 tracking-tight">{t.title}</h4>
+                <p className="text-[10px] font-medium text-slate-500 mt-1 whitespace-pre-wrap leading-relaxed">{t.body}</p>
+              </div>
+              <button
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                className="flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded-lg hover:bg-slate-100/50"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <style>{`
+        @keyframes slideIn {
+          from {
+            transform: translateX(120%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 };

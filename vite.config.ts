@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import feedbackHandler from './api/feedback';
 import feedbackIdHandler from './api/feedback/[id]';
+import notifyActivationHandler from './api/notify-activation';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -18,8 +19,8 @@ export default defineConfig(({ mode }) => {
           const apiMiddleware = async (req: any, res: any, next: any) => {
             const url = req.url || '';
             
-            // Match /api/feedback paths
-            if (url.startsWith('/api/feedback')) {
+            // Match /api/feedback and /api/notify-activation paths
+            if (url.startsWith('/api/feedback') || url.startsWith('/api/notify-activation')) {
               try {
                 const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
                 const pathname = parsedUrl.pathname;
@@ -68,6 +69,11 @@ export default defineConfig(({ mode }) => {
                     const id = parts[parts.length - 1] || parts[parts.length - 2];
                     (req as any).query.id = id;
                     await idHandlerFn(req, mockRes);
+                  } else if (pathname === '/api/notify-activation' || pathname === '/api/notify-activation/') {
+                    const notifyFn = typeof notifyActivationHandler === 'function'
+                      ? notifyActivationHandler
+                      : (notifyActivationHandler as any).default;
+                    await notifyFn(req, mockRes);
                   } else {
                     next();
                   }

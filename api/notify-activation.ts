@@ -1,4 +1,11 @@
+import { createClient } from '@supabase/supabase-js';
+
 declare const process: any;
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dpthhttwmtgtbrsjtfcg.supabase.co';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRwdGhodHR3bXRndGJyc2p0ZmNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MTA0NjUsImV4cCI6MjA5ODA4NjQ2NX0.kUHLK0QIVdCu0jAMq3zp8bxDpvg1g-9Mj5FrGoA1tB4';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default async function handler(req: any, res: any) {
   // Allow CORS
@@ -19,10 +26,14 @@ export default async function handler(req: any, res: any) {
     
     // Parse webhook event details from Supabase Webhook payload
     // Table is 'licenses', event is 'UPDATE'
-    const { event, table, record, old_record } = payload;
+    const { event, type, table, record, old_record } = payload;
+    const action = event || type;
 
-    if (table === 'licenses' && event === 'UPDATE') {
-      const isNewlyActivated = record.associated_device && !old_record.associated_device;
+    if (table === 'licenses' && action === 'UPDATE' && record) {
+      const isNewlyActivated =
+        record.associated_device &&
+        record.associated_device !== 'UNBOUND' &&
+        (!old_record || !old_record.associated_device || old_record.associated_device === 'UNBOUND');
 
       if (isNewlyActivated) {
         const licenseKey = record.license_key || record.id;
@@ -32,31 +43,61 @@ export default async function handler(req: any, res: any) {
         const onesignalAppId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID;
         const onesignalApiKey = process.env.ONESIGNAL_API_KEY;
 
-        if (onesignalAppId && onesignalApiKey) {
-          const response = await fetch('https://onesignal.com/api/v1/notifications', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json; charset=utf-8',
-              'Authorization': `Basic ${onesignalApiKey}`
-            },
-            body: JSON.stringify({
-              app_id: onesignalAppId,
-              included_segments: ['Subscribed Users'],
-              headings: { en: 'Lisensi Diaktifkan! 🔑', id: 'Lisensi Diaktifkan! 🔑' },
-              contents: { 
-                en: `Lisensi ${licenseKey} berhasil diaktifkan pada perangkat: ${deviceId}`,
-                id: `Lisensi ${licenseKey} berhasil diaktifkan pada perangkat: ${deviceId}`
-              }
-            })
-          });
+        let pushResult = null;
+        let pushError = null;
 
-          const result = await response.json();
-          return res.status(200).json({
-            success: true,
-            message: 'OneSignal activation notification dispatched successfully.',
-            result
-          });
+        if (onesignalAppId && onesignalApiKey) {
+          try {
+            const response = await fetch('https://onesignal.com/api/v1/notifications', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Authorization': `Basic ${onesignalApiKey}`
+              },
+              body: JSON.stringify({
+                app_id: onesignalAppId,
+                included_segments: ['Subscribed Users'],
+                headings: { en: 'Lisensi Diaktifkan! 🔑', id: 'Lisensi Diaktifkan! 🔑' },
+                contents: { 
+                  en: `Lisensi ${licenseKey} berhasil diaktifkan pada perangkat: ${deviceId}`,
+                  id: `Lisensi ${licenseKey} berhasil diaktifkan pada perangkat: ${deviceId}`
+                }
+              })
+            });
+
+            pushResult = await response.json();
+          } catch (err: any) {
+            pushError = err.message;
+            console.error('OneSignal push notification error:', err);
+          }
         }
+
+        // Insert notification log to database
+        try {
+          const { error: dbError } = await supabase
+            .from('notifications')
+            .insert([{
+              title: 'Lisensi Diaktifkan! 🔑',
+              body: `Lisensi ${licenseKey} berhasil diaktifkan pada perangkat: ${deviceId}`,
+              message: `Lisensi ${licenseKey} berhasil diaktifkan pada perangkat: ${deviceId}`,
+              target_type: 'ALL',
+              target_id: null,
+              status: pushError ? 'FAILED' : 'SENT',
+              scheduled_at: new Date().toISOString()
+            }]);
+          
+          if (dbError) {
+            console.error('Failed to log activation notification to database:', dbError);
+          }
+        } catch (dbErr: any) {
+          console.error('Database insertion error:', dbErr);
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: 'Activation processed and notification logged.',
+          pushResult
+        });
       }
     }
 
@@ -72,3 +113,4 @@ export default async function handler(req: any, res: any) {
     });
   }
 }
+

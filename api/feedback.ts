@@ -160,7 +160,7 @@ export default async function handler(req: any, res: any) {
           build_type: build_type || null,
           diagnostic_log: diagnostic_log || null,
           screenshot_url: screenshot_url || null,
-          timestamp: new Date(timestamp).toISOString(),
+          timestamp: typeof timestamp === 'number' ? timestamp : (isNaN(Date.parse(timestamp)) ? Date.now() : new Date(timestamp).getTime()),
           status: 'NEW'
         }])
         .select()
@@ -176,6 +176,8 @@ export default async function handler(req: any, res: any) {
       // 4. Send OneSignal Push Notification to Admin
       const onesignalAppId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID;
       const onesignalApiKey = process.env.ONESIGNAL_API_KEY;
+
+      let pushError = null;
 
       if (onesignalAppId && onesignalApiKey) {
         try {
@@ -198,9 +200,31 @@ export default async function handler(req: any, res: any) {
               }
             })
           });
-        } catch (pushError) {
-          console.error('OneSignal push notification error:', pushError);
+        } catch (err: any) {
+          pushError = err.message;
+          console.error('OneSignal push notification error:', err);
         }
+      }
+
+      // 5. Insert notification log to database
+      try {
+        const { error: dbError } = await supabase
+          .from('notifications')
+          .insert([{
+            title: 'Laporan Masukan Baru! ⚠️',
+            body: `Aplikasi: ${application_name || 'Generic App'}\nKategori: ${category}\nJudul: ${title}`,
+            message: `Aplikasi: ${application_name || 'Generic App'}\nKategori: ${category}\nJudul: ${title}`,
+            target_type: 'ALL',
+            target_id: null,
+            status: pushError ? 'FAILED' : 'SENT',
+            scheduled_at: new Date().toISOString()
+          }]);
+        
+        if (dbError) {
+          console.error('Failed to log feedback notification to database:', dbError);
+        }
+      } catch (dbErr: any) {
+        console.error('Database insertion error for feedback log:', dbErr);
       }
 
       return res.status(201).json({
