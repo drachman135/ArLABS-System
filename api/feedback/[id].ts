@@ -4,13 +4,23 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dpthhttwmtgtbrsjt
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRwdGhodHR3bXRndGJyc2p0ZmNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MTA0NjUsImV4cCI6MjA5ODA4NjQ2NX0.kUHLK0QIVdCu0jAMq3zp8bxDpvg1g-9Mj5FrGoA1tB4';
 
 // Helper to authenticate request
-async function authenticateAdmin(req: any, supabase: any) {
+async function authenticateAdmin(req: any) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { error: 'Missing or invalid Authorization header', status: 401 };
   }
 
   const token = authHeader.split(' ')[1];
+  
+  // Initialize Supabase client with user's JWT so queries respect RLS boundaries
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
+
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
   if (authError || !user) {
@@ -25,7 +35,7 @@ async function authenticateAdmin(req: any, supabase: any) {
     .maybeSingle();
 
   if (admin && !adminError) {
-    return { user, admin };
+    return { user, admin, supabase };
   }
 
   // 2. Fallback: Cross-reference public.users table from Phase 1
@@ -36,7 +46,7 @@ async function authenticateAdmin(req: any, supabase: any) {
     .maybeSingle();
 
   if (dbUser && !dbUserError && ['admin', 'super_admin', 'staff'].includes(dbUser.role)) {
-    return { user, admin: { role: dbUser.role } };
+    return { user, admin: { role: dbUser.role }, supabase };
   }
 
   return { error: 'Forbidden: Admin access required', status: 403 };
@@ -52,18 +62,19 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { id } = req.query;
 
   if (!id) {
     return res.status(400).json({ success: false, error: 'Feedback report ID is required.' });
   }
 
-  // Authenticate Admin
-  const auth = await authenticateAdmin(req, supabase);
+  // Authenticate Admin and retrieve token-bound client
+  const auth = await authenticateAdmin(req);
   if (auth.error) {
     return res.status(auth.status || 401).json({ success: false, error: auth.error });
   }
+
+  const supabase = auth.supabase;
 
   // ─── GET: GET FEEDBACK REPORT DETAIL ───────────────────────
   if (req.method === 'GET') {
