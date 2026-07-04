@@ -10,8 +10,8 @@ import { RemoteConfigScreen } from '../config/RemoteConfigScreen';
 import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
 import { ApkStatsDashboard } from '../apkstats/ApkStatsDashboard';
 import { CrashReportScreen } from '../crash/CrashReportScreen';
-import { 
-  RefreshCw, 
+import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
+import {   RefreshCw, 
   Wifi,
   Database
 } from 'lucide-react';
@@ -31,7 +31,7 @@ interface LogEntry {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -220,6 +220,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 }`}
             >
               Crash Reports ⚠️
+            </button>
+            <button
+              onClick={() => setActiveView('feedback')}
+              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'feedback'
+                  ? 'bg-gradient-to-r from-[#0EA5E9] to-[#38bdf8] text-white shadow-[2px_2px_8px_rgba(14,165,233,0.35)]'
+                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
+                }`}
+            >
+              Feedback Center 💬
             </button>
             <button
               onClick={() => setActiveView('licenses')}
@@ -525,6 +534,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       ) : activeView === 'announcements' ? (
         // RENDER IN-APP ANNOUNCEMENT SCREEN TABLE WORKSPACE
         <AnnouncementScreen />
+      ) : activeView === 'feedback' ? (
+        // RENDER FEEDBACK CENTER WORKSPACE
+        <FeedbackCenterScreen session={session} />
       ) : (
         // RENDER REMOTE CONFIGURATION SCREEN TABLE WORKSPACE
         <RemoteConfigScreen />
