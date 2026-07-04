@@ -52,21 +52,22 @@ export async function fetchDownloadSummary(): Promise<DownloadSummaryMetrics> {
     const failedCount = getCount(failedRes);
     const totalAttempts = successCount + failedCount;
 
-    // Get latest release downloads — use the most recent app_updates entry
+    // Get latest release downloads — use the most recent application_versions entry
     const { data: latestRelease } = await supabase
-      .from('app_updates')
-      .select('version_name, package_name')
+      .from('application_versions')
+      .select('version_name, applications(package_name)')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     let latestReleaseDownloads = 0;
     if (latestRelease) {
+      const packageName = (latestRelease as any).applications?.package_name || 'unknown';
       const { count } = await supabase
         .from('apk_download_logs')
         .select('*', { count: 'exact', head: true })
         .eq('version_name', latestRelease.version_name)
-        .eq('package_name', latestRelease.package_name);
+        .eq('package_name', packageName);
       latestReleaseDownloads = count ?? 0;
     }
 
@@ -221,8 +222,8 @@ export async function fetchAppDownloadCards(): Promise<AppDownloadCard[]> {
 // ──────────────────────────────────────────────────────────────
 export async function fetchVersionStats(): Promise<VersionStat[]> {
   const { data: updates, error } = await supabase
-    .from('app_updates')
-    .select('id, package_name, version_name, version_code, is_force_update, created_at')
+    .from('application_versions')
+    .select('id, version_name, version_code, force_update, created_at, applications(package_name)')
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -232,19 +233,20 @@ export async function fetchVersionStats(): Promise<VersionStat[]> {
     updates.map(async (u) => {
       let totalDownloads = 0;
       let activeInstallations = 0;
+      const packageName = (u as any).applications?.package_name || 'unknown';
 
       try {
         const { count: dlCount } = await supabase
           .from('apk_download_logs')
           .select('*', { count: 'exact', head: true })
-          .eq('package_name', u.package_name)
+          .eq('package_name', packageName)
           .eq('version_name', u.version_name)
           .eq('status', 'SUCCESS');
 
         const { count: installedCount } = await supabase
           .from('apk_download_logs')
           .select('*', { count: 'exact', head: true })
-          .eq('package_name', u.package_name)
+          .eq('package_name', packageName)
           .eq('version_name', u.version_name)
           .not('installed_at', 'is', null);
 
@@ -255,12 +257,12 @@ export async function fetchVersionStats(): Promise<VersionStat[]> {
       return {
         version_name: u.version_name,
         version_code: u.version_code,
-        package_name: u.package_name,
+        package_name: packageName,
         release_date: u.created_at,
         total_downloads: totalDownloads,
         active_installations: activeInstallations,
         adoption_percentage: 0, // computed in UI from total devices
-        is_force_update: u.is_force_update,
+        is_force_update: !!u.force_update,
       } as VersionStat;
     })
   );

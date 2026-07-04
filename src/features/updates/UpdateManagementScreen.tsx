@@ -4,16 +4,20 @@ import { RefreshCw, Loader2, Cloud, Calendar, FileText, Server, UploadCloud, Hel
 
 interface AppUpdate {
   id: string;
+  application_id?: string;
   package_name?: string;
   version_code: number;
   version_name: string;
   changelog: string;
   apk_cloudflare_url: string;
+  download_url?: string;
   is_force_update: boolean;
+  force_update?: boolean;
   created_at: string;
 }
 
 interface ApplicationOption {
+  id: string;
   package_name: string;
   app_name: string;
 }
@@ -25,6 +29,7 @@ export const UpdateManagementScreen: React.FC = () => {
   const [submitLoading, setSubmitLoading] = useState<boolean>(false);
 
   // Form states
+  const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [selectedPackage, setSelectedPackage] = useState<string>('');
   const [versionName, setVersionName] = useState<string>('v1.2.0');
   const [versionCode, setVersionCode] = useState<number>(12);
@@ -164,13 +169,14 @@ export const UpdateManagementScreen: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('applications')
-        .select('package_name, app_name')
+        .select('id, package_name, app_name')
         .order('app_name', { ascending: true });
 
       if (error) throw error;
 
       if (data && data.length > 0) {
         setApps(data);
+        setSelectedAppId(data[0].id);
         setSelectedPackage(data[0].package_name);
       } else {
         throw new Error('No applications registered.');
@@ -178,10 +184,11 @@ export const UpdateManagementScreen: React.FC = () => {
     } catch (err) {
       console.warn('Failed to fetch applications for dropdown. Utilizing fallback packages.', err);
       const fallbackApps = [
-        { package_name: 'com.arlabs.client', app_name: 'ArLABS Android Client' },
-        { package_name: 'com.arlabs.pos', app_name: 'ArLABS POS Companion' }
+        { id: 'app-1', package_name: 'com.arlabs.client', app_name: 'ArLABS Android Client' },
+        { id: 'app-2', package_name: 'com.arlabs.pos', app_name: 'ArLABS POS Companion' }
       ];
       setApps(fallbackApps);
+      setSelectedAppId(fallbackApps[0].id);
       setSelectedPackage(fallbackApps[0].package_name);
     }
   };
@@ -191,19 +198,33 @@ export const UpdateManagementScreen: React.FC = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('app_updates')
-        .select('*')
-        .order('version_code', { ascending: false });
+        .from('application_versions')
+        .select('id, application_id, version_code, version_name, changelog, download_url, force_update, created_at, applications(package_name)')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       if (data) {
-        setUpdates(data);
+        // Map the structure of application_versions to AppUpdate
+        const mappedData: AppUpdate[] = data.map((item: any) => ({
+          id: item.id,
+          application_id: item.application_id,
+          package_name: item.applications?.package_name || 'unknown',
+          version_code: item.version_code,
+          version_name: item.version_name,
+          changelog: item.changelog || '',
+          apk_cloudflare_url: item.download_url || '',
+          download_url: item.download_url || '',
+          is_force_update: !!item.force_update,
+          force_update: !!item.force_update,
+          created_at: item.created_at
+        }));
+        setUpdates(mappedData);
       } else {
         setUpdates([]);
       }
     } catch (err) {
-      console.warn('App_updates table query failed. Setting local sandbox history list.', err);
+      console.warn('application_versions table query failed. Setting local sandbox history list.', err);
       // Fallback sandbox mockup history logs
       setUpdates([
         { 
@@ -248,19 +269,20 @@ export const UpdateManagementScreen: React.FC = () => {
     setSubmitLoading(true);
 
     const newRelease = {
-      package_name: selectedPackage,
+      application_id: selectedAppId,
       version_code: versionCode,
       version_name: versionName,
       changelog: changelog,
-      apk_cloudflare_url: apkUrl,
-      is_force_update: isForce,
+      download_url: apkUrl,
+      force_update: isForce,
+      is_active: true,
       created_at: new Date().toISOString()
     };
 
     try {
       const { error } = await supabase
-        .from('app_updates')
-        .insert(newRelease);
+        .from('application_versions')
+        .insert([newRelease]);
 
       if (error) throw error;
 
@@ -275,11 +297,20 @@ export const UpdateManagementScreen: React.FC = () => {
       await fetchUpdates();
 
     } catch (err) {
-      console.warn('Failed to insert metadata into app_updates table. Syncing local sandbox state.', err);
+      console.warn('Failed to insert metadata into application_versions table. Syncing local sandbox state.', err);
       // Offline fallback simulator
       const simulated: AppUpdate = {
         id: `upd-sim-${Date.now()}`,
-        ...newRelease
+        application_id: selectedAppId,
+        package_name: selectedPackage,
+        version_code: versionCode,
+        version_name: versionName,
+        changelog: changelog,
+        apk_cloudflare_url: apkUrl,
+        download_url: apkUrl,
+        is_force_update: isForce,
+        force_update: isForce,
+        created_at: new Date().toISOString()
       };
 
       setUpdates(prev => [simulated, ...prev]);
@@ -328,12 +359,19 @@ export const UpdateManagementScreen: React.FC = () => {
                 Target Application Package
               </label>
               <select
-                value={selectedPackage}
-                onChange={(e) => setSelectedPackage(e.target.value)}
+                value={selectedAppId}
+                onChange={(e) => {
+                  const appId = e.target.value;
+                  setSelectedAppId(appId);
+                  const matched = apps.find(a => a.id === appId);
+                  if (matched) {
+                    setSelectedPackage(matched.package_name);
+                  }
+                }}
                 className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] cursor-pointer shadow-sm font-bold"
               >
                 {apps.map((app) => (
-                  <option key={app.package_name} value={app.package_name}>
+                  <option key={app.id} value={app.id}>
                     {app.app_name} [{app.package_name}]
                   </option>
                 ))}
