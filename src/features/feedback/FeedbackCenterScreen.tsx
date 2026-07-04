@@ -55,16 +55,17 @@ const KpiCard: React.FC<{
 
 // ─── Badge Status Component ──────────────────────────────────
 const Badge: React.FC<{ status: FeedbackStatus }> = ({ status }) => {
+  const safeStatus = status || 'NEW';
   const cls = {
     NEW: 'bg-blue-50 text-blue-600 border-blue-100',
     IN_PROGRESS: 'bg-amber-50 text-amber-600 border-amber-100',
     RESOLVED: 'bg-emerald-50 text-emerald-600 border-emerald-100',
     REJECTED: 'bg-rose-50 text-rose-600 border-rose-100'
-  }[status] || 'bg-gray-50 text-gray-500 border-gray-100';
+  }[safeStatus] || 'bg-gray-50 text-gray-500 border-gray-100';
 
   return (
     <span className={`px-2 py-0.5 text-[8.5px] font-bold uppercase rounded border ${cls}`}>
-      {status.replace('_', ' ')}
+      {safeStatus.replace('_', ' ')}
     </span>
   );
 };
@@ -509,8 +510,8 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                           </div>
                           <div className="text-[9px] font-mono">{report.package_name} (v{report.app_version})</div>
                         </td>
-                        <td className="p-4 text-[#64748B] font-mono text-[10px]" title={report.license_id}>
-                          {report.license_id.substring(0, 8)}...
+                        <td className="p-4 text-[#64748B] font-mono text-[10px]" title={report.license_id || ''}>
+                          {(report.license_id || '').substring(0, 8)}...
                         </td>
                         <td className="p-4 text-[#94a3b8] text-[10px] whitespace-nowrap">
                           {new Date(report.created_at).toLocaleString('en-US', { hour12: false })}
@@ -703,7 +704,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                       <div className="flex flex-wrap gap-2">
                         {['NEW', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'].map((st) => {
                           const statusVal = st as FeedbackStatus;
-                          const currentVal = detail.status;
+                          const currentVal = detail.status || 'NEW';
                           const isAllowed = getAvailableTransitions(currentVal).includes(statusVal);
                           const isActive = targetStatus === statusVal;
 
