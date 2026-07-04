@@ -61,3 +61,23 @@ CREATE TRIGGER update_feedback_reports_updated_at
     BEFORE UPDATE ON public.feedback_reports
     FOR EACH ROW
     EXECUTE PROCEDURE update_updated_at_column();
+
+-- Audit Logs table (used in Overview dashboard panel)
+CREATE TABLE IF NOT EXISTS public.logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action TEXT NOT NULL,
+  description TEXT,
+  severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warning', 'critical')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS
+ALTER TABLE public.logs ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for Logs
+DROP POLICY IF EXISTS "Allow authenticated read logs" ON public.logs;
+DROP POLICY IF EXISTS "Allow authenticated insert logs" ON public.logs;
+
+CREATE POLICY "Allow authenticated read logs" ON public.logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow authenticated insert logs" ON public.logs FOR INSERT TO authenticated WITH CHECK (true);
+
