@@ -83,6 +83,36 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     return () => clearInterval(interval);
   }, []);
 
+  // Dynamic OneSignal SDK Initialization
+  useEffect(() => {
+    const onesignalAppId = (import.meta as any).env?.VITE_ONESIGNAL_APP_ID;
+    if (!onesignalAppId) {
+      console.warn("OneSignal VITE_ONESIGNAL_APP_ID is not configured in environment variables.");
+      return;
+    }
+
+    const initOneSignal = async () => {
+      // Check if running on Capacitor (as a native app) and the plugin is loaded
+      if ((window as any).Capacitor && (window as any).plugins?.OneSignal) {
+        try {
+          const OneSignal = (window as any).plugins.OneSignal;
+          
+          // Initialize OneSignal
+          OneSignal.initialize(onesignalAppId);
+          
+          // Request notification permissions
+          OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
+            console.log("OneSignal push notification permission response:", success);
+          });
+        } catch (err) {
+          console.error("Failed to initialize OneSignal plugin:", err);
+        }
+      }
+    };
+
+    initOneSignal();
+  }, []);
+
   // Fetch metrics & check Supabase connectivity
   const fetchDashboardData = async () => {
     setLoading(true);

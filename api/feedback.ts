@@ -161,6 +161,36 @@ export default async function handler(req: any, res: any) {
         });
       }
 
+      // 4. Send OneSignal Push Notification to Admin
+      const onesignalAppId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID;
+      const onesignalApiKey = process.env.ONESIGNAL_API_KEY;
+
+      if (onesignalAppId && onesignalApiKey) {
+        try {
+          await fetch('https://onesignal.com/api/v1/notifications', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Authorization': `Basic ${onesignalApiKey}`
+            },
+            body: JSON.stringify({
+              app_id: onesignalAppId,
+              included_segments: ['Subscribed Users'],
+              headings: { en: 'Laporan Masukan Baru! ⚠️', id: 'Laporan Masukan Baru! ⚠️' },
+              contents: { 
+                en: `Aplikasi: ${application_name || 'Generic App'}\nKategori: ${category}\nJudul: ${title}`,
+                id: `Aplikasi: ${application_name || 'Generic App'}\nKategori: ${category}\nJudul: ${title}`
+              },
+              data: {
+                reportId: inserted.id
+              }
+            })
+          });
+        } catch (pushError) {
+          console.error('OneSignal push notification error:', pushError);
+        }
+      }
+
       return res.status(201).json({
         success: true,
         message: 'Feedback submitted successfully.',
