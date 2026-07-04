@@ -17,18 +17,29 @@ async function authenticateAdmin(req: any, supabase: any) {
     return { error: 'Invalid or expired session token', status: 401 };
   }
 
-  // Cross-reference admins table to check role
+  // 1. Cross-reference admins table to check role
   const { data: admin, error: adminError } = await supabase
     .from('admins')
     .select('role')
     .eq('id', user.id)
     .maybeSingle();
 
-  if (adminError || !admin) {
-    return { error: 'Forbidden: Admin access required', status: 403 };
+  if (admin && !adminError) {
+    return { user, admin };
   }
 
-  return { user, admin };
+  // 2. Fallback: Cross-reference public.users table from Phase 1
+  const { data: dbUser, error: dbUserError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (dbUser && !dbUserError && ['admin', 'super_admin', 'staff'].includes(dbUser.role)) {
+    return { user, admin: { role: dbUser.role } };
+  }
+
+  return { error: 'Forbidden: Admin access required', status: 403 };
 }
 
 // Vercel serverless handler
