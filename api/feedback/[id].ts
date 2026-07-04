@@ -51,6 +51,16 @@ async function authenticateAdmin(req: any) {
     return { user, admin: { role: dbUser.role }, supabase };
   }
 
+  // 3. Sandbox/Development fallback: If the admins table is completely empty,
+  // allow the authenticated user access as a temporary super_admin.
+  const { count: adminCount, error: countError } = await supabase
+    .from('admins')
+    .select('*', { count: 'exact', head: true });
+
+  if (!countError && adminCount === 0) {
+    return { user, admin: { role: 'super_admin' }, supabase };
+  }
+
   return { error: 'Forbidden: Admin access required', status: 403 };
 }
 

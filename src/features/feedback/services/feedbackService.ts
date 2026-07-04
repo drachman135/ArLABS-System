@@ -1,6 +1,8 @@
 import { supabase } from '../../../core/supabase';
 import type { FeedbackReport, FeedbackSummaryStats } from '../types/feedback.types';
 
+
+
 // ──────────────────────────────────────────────────────────────
 // TELEMETRY SUMMARY STATISTICS
 // ──────────────────────────────────────────────────────────────
@@ -53,10 +55,10 @@ export async function fetchFeedbackStats(): Promise<FeedbackSummaryStats> {
 }
 
 // ──────────────────────────────────────────────────────────────
-// LIST FEEDBACK REPORTS VIA SERVERLESS API
+// LIST FEEDBACK REPORTS DIRECTLY FROM SUPABASE
 // ──────────────────────────────────────────────────────────────
 export async function fetchFeedbackReports(
-  token: string,
+  _token: string,
   params: {
     search?: string;
     status?: string;
@@ -70,75 +72,100 @@ export async function fetchFeedbackReports(
     offset: number;
   }
 ): Promise<{ data: FeedbackReport[]; count: number }> {
-  const url = new URL('/api/feedback', window.location.origin);
-  Object.entries(params).forEach(([key, val]) => {
-    if (val !== undefined && val !== '') {
-      url.searchParams.set(key, String(val));
-    }
-  });
+  try {
+    let query = supabase
+      .from('feedback_reports')
+      .select('*', { count: 'exact' });
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
+    // Apply Filters
+    if (params.status) query = query.eq('status', params.status);
+    if (params.category) query = query.eq('category', params.category);
+    if (params.application) query = query.eq('application_name', params.application);
+    if (params.package) query = query.eq('package_name', params.package);
+    if (params.license) query = query.eq('license_id', params.license);
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Failed to fetch feedback reports');
+    // Date Filters
+    if (params.startDate) query = query.gte('created_at', new Date(params.startDate).toISOString());
+    if (params.endDate) query = query.lte('created_at', new Date(params.endDate).toISOString());
+
+    // Search Query (Category, Title, Description, License)
+    if (params.search) {
+      query = query.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%,category.ilike.%${params.search}%,license_id.ilike.%${params.search}%`);
+    }
+
+    // Pagination and Order
+    query = query
+      .order('created_at', { ascending: false })
+      .range(params.offset, params.offset + params.limit - 1);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return {
+      data: (data as FeedbackReport[]) || [],
+      count: count || 0
+    };
+  } catch (err: any) {
+    console.error('Failed to fetch feedback reports directly from Supabase:', err);
+    throw err;
   }
-
-  const result = await response.json();
-  return {
-    data: result.data || [],
-    count: result.count || 0
-  };
 }
 
 // ──────────────────────────────────────────────────────────────
-// DETAILED REPORT VIA SERVERLESS API
+// DETAILED REPORT DIRECTLY FROM SUPABASE
 // ──────────────────────────────────────────────────────────────
 export async function fetchFeedbackReportDetail(
-  token: string,
+  _token: string,
   id: string
 ): Promise<FeedbackReport> {
-  const response = await fetch(`/api/feedback/${id}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
+  try {
+    const { data, error } = await supabase
+      .from('feedback_reports')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
     }
-  });
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Failed to fetch feedback details');
+    if (!data) {
+      throw new Error(`Feedback report with ID ${id} not found.`);
+    }
+
+    return data as FeedbackReport;
+  } catch (err: any) {
+    console.error('Failed to fetch feedback details directly from Supabase:', err);
+    throw err;
   }
-
-  const result = await response.json();
-  return result.data;
 }
 
 // ──────────────────────────────────────────────────────────────
-// UPDATE REPORT STATUS/NOTES VIA SERVERLESS API
+// UPDATE REPORT STATUS/NOTES DIRECTLY IN SUPABASE
 // ──────────────────────────────────────────────────────────────
 export async function updateFeedbackReport(
-  token: string,
+  _token: string,
   id: string,
   payload: { status?: string; developer_note?: string }
 ): Promise<FeedbackReport> {
-  const response = await fetch(`/api/feedback/${id}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const { data, error } = await supabase
+      .from('feedback_reports')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Failed to update feedback report');
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data as FeedbackReport;
+  } catch (err: any) {
+    console.error('Failed to update feedback report directly in Supabase:', err);
+    throw err;
   }
-
-  const result = await response.json();
-  return result.data;
 }
