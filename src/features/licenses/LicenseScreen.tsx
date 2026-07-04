@@ -19,6 +19,47 @@ interface License {
   } | null;
 }
 
+const buildCustomerTemplate = (licenseKey: string, downloadUrl: string, isEarlyAccess: boolean) => {
+  const productText = isEarlyAccess ? 'ArLABS POS Early Access' : 'ArLABS POS';
+  const userRoleText = isEarlyAccess ? 'pengguna Early Access' : 'pengguna';
+  
+  return `Halo 👋
+
+Terima kasih telah membeli ${productText}.
+
+Berikut data lisensi Anda:
+
+🔑 License Key
+${licenseKey}
+
+📥 Link Download APK
+${downloadUrl}
+
+Cara Aktivasi
+1. Install APK.
+2. Buka aplikasi.
+3. Halaman Welcome akan muncul saat pertama kali dibuka.
+4. Klik Lanjut.
+5. Masukkan License Key.
+6. Klik Aktivasi.
+7. Tunggu hingga proses selesai.
+
+Penting
+• License hanya berlaku untuk perangkat yang diaktivasi.
+• Simpan License Key dengan baik.
+• Aktivasi pertama membutuhkan koneksi internet.
+
+Sebagai ${userRoleText} Anda mendapatkan:
+• Lifetime License
+• Gratis seluruh pembaruan dan perbaikan
+• Prioritas fitur berdasarkan masukan pengguna
+
+Apabila mengalami kendala,
+gunakan menu Laporkan Masalah di dalam aplikasi.
+
+Terima kasih telah mempercayai ArLABS POS.`;
+};
+
 export const LicenseScreen: React.FC = () => {
   // Initial state defaults to empty array
   const [licenses, setLicenses] = useState<any[]>([]);
@@ -37,10 +78,46 @@ export const LicenseScreen: React.FC = () => {
   // Success overlay state
   const [successKey, setSuccessKey] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  
+  // New Generator State
+  const [generationMode, setGenerationMode] = useState<'EARLY_ACCESS' | 'RELEASE' | 'RE_GENERATE'>('EARLY_ACCESS');
+  const [latestDownloadUrl, setLatestDownloadUrl] = useState<string>('https://link.arlabs.io/download-apk');
+  const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
+  const [showDetailedSuccess, setShowDetailedSuccess] = useState<boolean>(false);
+  const [generatedTemplate, setGeneratedTemplate] = useState<string>('');
 
   // Associated Customer Detail Modal state
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
   const [selectedCustomer, setSelectedCustomer] = useState<License['customers'] | null>(null);
+
+  // Fetch latest download URL from application_versions table
+  const fetchLatestDownloadUrl = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('application_versions')
+        .select('download_url')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        setLatestDownloadUrl(data[0].download_url);
+      } else {
+        // Fallback: try querying without is_active filter
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('application_versions')
+          .select('download_url')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!fallbackError && fallbackData && fallbackData.length > 0) {
+          setLatestDownloadUrl(fallbackData[0].download_url);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch latest APK download URL from application_versions:', err);
+    }
+  };
 
   // Fetch licenses from database with LEFT JOIN to pull customer profile details
   const fetchLicenses = async () => {
@@ -55,6 +132,7 @@ export const LicenseScreen: React.FC = () => {
 
   useEffect(() => {
     fetchLicenses();
+    fetchLatestDownloadUrl();
   }, []);
 
   // Suspend License Status
@@ -156,12 +234,41 @@ export const LicenseScreen: React.FC = () => {
     }
   };
 
-  // Generate Single Lifetime License & Customer Registration (Dual Insert Transaction)
   const handleGenerateLicense = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(true);
 
     try {
+      // Fetch latest download URL dynamically to ensure it is fresh
+      let apkUrl = latestDownloadUrl;
+      try {
+        const { data, error } = await supabase
+          .from('application_versions')
+          .select('download_url')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          apkUrl = data[0].download_url;
+          setLatestDownloadUrl(apkUrl);
+        } else {
+          // Try fetching without active filter
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('application_versions')
+            .select('download_url')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (!fallbackError && fallbackData && fallbackData.length > 0) {
+            apkUrl = fallbackData[0].download_url;
+            setLatestDownloadUrl(apkUrl);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch latest APK download URL on submit:', err);
+      }
+
       // Step A: Insert into public.customers
       const { data: customerData, error: customerError } = await supabase
         .from('customers')
@@ -209,9 +316,17 @@ export const LicenseScreen: React.FC = () => {
       }
 
       // UI STATE REFRESH:
-      // display a success toast showing the generated license key
       setSuccessKey(generatedKey);
       setCopied(false);
+
+      if (generationMode === 'RE_GENERATE') {
+        setShowDetailedSuccess(false);
+      } else {
+        const template = buildCustomerTemplate(generatedKey, apkUrl, generationMode === 'EARLY_ACCESS');
+        setGeneratedTemplate(template);
+        setShowDetailedSuccess(true);
+        setCopiedTemplate(false);
+      }
 
       // Automatically clear the form inputs
       setCustomerName('');
@@ -435,6 +550,47 @@ export const LicenseScreen: React.FC = () => {
 
             <form onSubmit={handleGenerateLicense} className="space-y-4 text-xs">
               <div className="space-y-2">
+                <label className="block text-[#64748B] uppercase font-bold tracking-widest text-[9px] font-semibold">
+                  Generate Option
+                </label>
+                <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setGenerationMode('EARLY_ACCESS')}
+                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 ${
+                      generationMode === 'EARLY_ACCESS'
+                        ? 'bg-white text-[#0EA5E9] shadow-sm border-none'
+                        : 'text-[#64748B] hover:text-[#1E293B] border-none bg-transparent'
+                    }`}
+                  >
+                    Early Access
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGenerationMode('RELEASE')}
+                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 ${
+                      generationMode === 'RELEASE'
+                        ? 'bg-white text-[#0EA5E9] shadow-sm border-none'
+                        : 'text-[#64748B] hover:text-[#1E293B] border-none bg-transparent'
+                    }`}
+                  >
+                    Release
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGenerationMode('RE_GENERATE')}
+                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 ${
+                      generationMode === 'RE_GENERATE'
+                        ? 'bg-white text-[#0EA5E9] shadow-sm border-none'
+                        : 'text-[#64748B] hover:text-[#1E293B] border-none bg-transparent'
+                    }`}
+                  >
+                    Re-Generate
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
                 <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
                   Full Name
                 </label>
@@ -579,52 +735,141 @@ export const LicenseScreen: React.FC = () => {
         </div>
       )}
 
-      {/* 5. Neumorphic Generated Key Toast Overlay Dialog */}
+      {/* 5. Success Dialog Switcher */}
       {successKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.15)] p-6 max-w-sm w-full rounded-[24px] text-center space-y-6 animate-scale-up">
-            
-            <div className="space-y-2">
-              <span className="text-[9px] bg-green-50 text-green-600 border border-green-100 rounded-full px-3 py-1 font-bold uppercase tracking-widest">
-                License Key Generated
-              </span>
-              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider pt-2">Generated License Key</h4>
-              <p className="text-xs text-[#64748B]">Send this code to the client device to unlock premium assets.</p>
-            </div>
+        showDetailedSuccess ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.15)] p-6 max-w-md w-full rounded-[24px] space-y-5 animate-scale-up">
+              
+              <div className="text-center space-y-1.5">
+                <span className="text-[9px] bg-green-50 text-green-600 border border-green-100 rounded-full px-3 py-1 font-bold uppercase tracking-widest inline-block">
+                  Success
+                </span>
+                <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider pt-1">
+                  License Successfully Generated
+                </h4>
+              </div>
 
-            {/* Generated Key monospaced text display */}
-            <div className="bg-gray-50 border border-gray-200/50 p-4 rounded-2xl font-mono text-base font-black tracking-tight text-[#0EA5E9] select-all break-all shadow-inner">
-              {successKey}
-            </div>
+              {/* License Key Section */}
+              <div className="space-y-1.5 text-left">
+                <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest block">
+                  License Key
+                </label>
+                <div className="bg-gray-50 border border-gray-200 p-3.5 rounded-xl font-mono text-sm font-black tracking-tight text-[#0EA5E9] select-all text-center shadow-inner break-all">
+                  {successKey}
+                </div>
+              </div>
 
-            <div className="flex space-x-3 pt-2">
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(successKey);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-                className="flex-1 bg-[#0EA5E9] hover:bg-[#0ea5e9]/95 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md flex items-center justify-center space-x-1 uppercase"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4 text-white" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <span>[ Copy Key ]</span>
-                )}
-              </button>
-              <button
-                onClick={() => setSuccessKey(null)}
-                className="bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs px-5 py-3 rounded-xl transition-all duration-300 shadow-sm uppercase"
-              >
-                Close
-              </button>
-            </div>
+              {/* Customer Delivery Template Section */}
+              <div className="space-y-1.5 text-left">
+                <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest block">
+                  Customer Delivery Template
+                </label>
+                <textarea
+                  readOnly
+                  value={generatedTemplate}
+                  className="w-full h-48 bg-slate-50 border border-gray-200 rounded-xl p-3 font-mono text-[10px] leading-relaxed text-[#334155] focus:outline-none focus:ring-1 focus:ring-[#0EA5E9] resize-none shadow-inner"
+                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                />
+              </div>
 
+              {/* Action Buttons */}
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(successKey);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="bg-white hover:bg-gray-50 text-[#1E293B] border border-gray-200 font-bold text-[10px] py-3 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center space-x-1 uppercase border-none"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <span>Copy License</span>
+                  )}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedTemplate);
+                    setCopiedTemplate(true);
+                    setTimeout(() => setCopiedTemplate(false), 2000);
+                  }}
+                  className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/95 text-white font-bold text-[10px] py-3 rounded-xl transition-all duration-300 shadow-md flex items-center justify-center space-x-1 uppercase border-none"
+                >
+                  {copiedTemplate ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-white" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <span>Copy Template</span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setSuccessKey(null);
+                    setShowDetailedSuccess(false);
+                  }}
+                  className="bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-[10px] py-3 rounded-xl transition-all duration-300 shadow-md uppercase border-none"
+                >
+                  Close
+                </button>
+              </div>
+
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.15)] p-6 max-w-sm w-full rounded-[24px] text-center space-y-6 animate-scale-up">
+              
+              <div className="space-y-2">
+                <span className="text-[9px] bg-green-50 text-green-600 border border-green-100 rounded-full px-3 py-1 font-bold uppercase tracking-widest">
+                  License Key Generated
+                </span>
+                <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider pt-2">Generated License Key</h4>
+                <p className="text-xs text-[#64748B]">Send this code to the client device to unlock premium assets.</p>
+              </div>
+
+              {/* Generated Key display */}
+              <div className="bg-gray-50 border border-gray-200/50 p-4 rounded-2xl font-mono text-base font-black tracking-tight text-[#0EA5E9] select-all break-all shadow-inner">
+                {successKey}
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(successKey);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="flex-1 bg-[#0EA5E9] hover:bg-[#0ea5e9]/95 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md flex items-center justify-center space-x-1 uppercase border-none"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4 text-white" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <span>[ Copy Key ]</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setSuccessKey(null)}
+                  className="bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs px-5 py-3 rounded-xl transition-all duration-300 shadow-sm uppercase border-none"
+                >
+                  Close
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )
       )}
 
     </div>
