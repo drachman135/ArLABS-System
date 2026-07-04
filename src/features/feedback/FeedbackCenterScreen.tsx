@@ -257,9 +257,9 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
       {/* ─── TITLE & CONTROL BLOCK ──────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-[#1E293B] tracking-tight">Feedback Center</h1>
+          <h1 className="text-2xl font-black text-[#1E293B] tracking-tight">Pusat Masukan</h1>
           <p className="text-xs text-[#64748B] font-medium tracking-wide">
-            Analyze, manage, and process feedback reports submitted by ArLABS application devices.
+            Analisis, kelola, dan proses laporan masukan yang dikirim oleh perangkat aplikasi ArLABS.
           </p>
         </div>
         <button
@@ -271,7 +271,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
           className="flex items-center space-x-2 bg-white hover:bg-gray-50 text-[#1E293B] px-4 py-2 rounded-xl text-xs font-bold border border-gray-200 shadow-sm transition-all duration-300 active:scale-95"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Database</span>
+          <span>Perbarui Database</span>
         </button>
       </div>
 
@@ -279,7 +279,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard
           icon={<MessageSquare className="w-5 h-5" />}
-          label="New Reports"
+          label="Laporan Baru"
           value={stats?.newCount || 0}
           color="#0EA5E9"
           bg="bg-sky-50"
@@ -287,7 +287,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
         />
         <KpiCard
           icon={<RefreshCw className="w-5 h-5" />}
-          label="In Progress"
+          label="Sedang Diproses"
           value={stats?.inProgressCount || 0}
           color="#F59E0B"
           bg="bg-amber-50"
@@ -295,7 +295,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
         />
         <KpiCard
           icon={<CheckCircle2 className="w-5 h-5" />}
-          label="Resolved"
+          label="Selesai"
           value={stats?.resolvedCount || 0}
           color="#10B981"
           bg="bg-emerald-50"
@@ -303,7 +303,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
         />
         <KpiCard
           icon={<ShieldAlert className="w-5 h-5" />}
-          label="Rejected"
+          label="Ditolak"
           value={stats?.rejectedCount || 0}
           color="#EF4444"
           bg="bg-rose-50"
@@ -311,7 +311,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
         />
         <KpiCard
           icon={<Calendar className="w-5 h-5" />}
-          label="Submitted Today"
+          label="Dikirim Hari Ini"
           value={stats?.todayCount || 0}
           color="#6366F1"
           bg="bg-indigo-50"
@@ -319,7 +319,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
         />
         <KpiCard
           icon={<ChevronRight className="w-5 h-5" />}
-          label="This Week"
+          label="Minggu Ini"
           value={stats?.thisWeekCount || 0}
           color="#8B5CF6"
           bg="bg-purple-50"
@@ -335,7 +335,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
           <Card className="p-6">
             <h3 className="text-sm font-bold text-[#1E293B] uppercase tracking-wider mb-6 flex items-center space-x-2">
               <MessageSquare className="w-4 h-4 text-[#0EA5E9]" />
-              <span>Feedback Database Logs</span>
+              <span>Log Database Masukan</span>
             </h3>
 
             {/* Filter Actions */}
@@ -349,7 +349,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   </span>
                   <input
                     type="text"
-                    placeholder="Search title, description, license..."
+                    placeholder="Cari judul, deskripsi, lisensi..."
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                     className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] focus:border-[#0EA5E9] outline-none"
@@ -362,11 +362,11 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none bg-white font-medium"
                 >
-                  <option value="">All Statuses</option>
-                  <option value="NEW">New</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="RESOLVED">Resolved</option>
-                  <option value="REJECTED">Rejected</option>
+                  <option value="">Semua Status</option>
+                  <option value="NEW">Baru</option>
+                  <option value="IN_PROGRESS">Sedang Diproses</option>
+                  <option value="RESOLVED">Selesai</option>
+                  <option value="REJECTED">Ditolak</option>
                 </select>
 
                 {/* Category Filter */}
@@ -375,7 +375,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none bg-white font-medium"
                 >
-                  <option value="">All Categories</option>
+                  <option value="">Semua Kategori</option>
                   {availableCategories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
@@ -392,7 +392,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   onChange={(e) => { setFilterApplication(e.target.value); setPage(1); }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none bg-white"
                 >
-                  <option value="">All Applications</option>
+                  <option value="">Semua Aplikasi</option>
                   {availableApplications.map(app => (
                     <option key={app} value={app}>{app}</option>
                   ))}
@@ -404,7 +404,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   onChange={(e) => { setFilterPackage(e.target.value); setPage(1); }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none bg-white"
                 >
-                  <option value="">All Packages</option>
+                  <option value="">Semua Paket</option>
                   {availablePackages.map(pkg => (
                     <option key={pkg} value={pkg}>{pkg}</option>
                   ))}
@@ -416,7 +416,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   onChange={(e) => { setFilterLicense(e.target.value); setPage(1); }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none bg-white"
                 >
-                  <option value="">All Licenses</option>
+                  <option value="">Semua Lisensi</option>
                   {availableLicenses.map(lic => (
                     <option key={lic} value={lic}>{lic.substring(0, 18)}...</option>
                   ))}
@@ -427,7 +427,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   onClick={handleClearFilters}
                   className="w-full text-xs font-bold bg-[#F8FAFC] border border-gray-200 hover:bg-gray-100 text-[#64748B] py-2 rounded-xl transition-all duration-300"
                 >
-                  Reset Filtering Parameters
+                  Reset Parameter Filter
                 </button>
 
               </div>
@@ -435,7 +435,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
               {/* Date Filters */}
               <div className="grid grid-cols-2 gap-3 max-w-md pt-1">
                 <div>
-                  <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Start Date</label>
+                  <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Tanggal Mulai</label>
                   <input
                     type="date"
                     value={filterStartDate}
@@ -444,7 +444,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1">End Date</label>
+                  <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-1">Tanggal Selesai</label>
                   <input
                     type="date"
                     value={filterEndDate}
@@ -461,11 +461,11 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                 <thead>
                   <tr className="bg-[#F8FAFC] text-[#64748B] font-bold border-b border-gray-100">
                     <th className="p-4 uppercase tracking-wider text-[9px]">Status</th>
-                    <th className="p-4 uppercase tracking-wider text-[9px]">Category</th>
-                    <th className="p-4 uppercase tracking-wider text-[9px]">Title</th>
-                    <th className="p-4 uppercase tracking-wider text-[9px]">App Info</th>
-                    <th className="p-4 uppercase tracking-wider text-[9px]">License ID</th>
-                    <th className="p-4 uppercase tracking-wider text-[9px]">Created At</th>
+                    <th className="p-4 uppercase tracking-wider text-[9px]">Kategori</th>
+                    <th className="p-4 uppercase tracking-wider text-[9px]">Judul</th>
+                    <th className="p-4 uppercase tracking-wider text-[9px]">Info Aplikasi</th>
+                    <th className="p-4 uppercase tracking-wider text-[9px]">ID Lisensi</th>
+                    <th className="p-4 uppercase tracking-wider text-[9px]">Dibuat Pada</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -487,8 +487,8 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                           <div className="p-4 bg-slate-50 text-slate-400 rounded-full">
                             <MessageSquare className="w-8 h-8" />
                           </div>
-                          <p className="text-xs font-bold text-[#64748B]">No feedback reports match the query.</p>
-                          <p className="text-[10px] text-[#94a3b8]">Submit a new feedback or adjust the filters above.</p>
+                          <p className="text-xs font-bold text-[#64748B]">Tidak ada laporan masukan yang cocok dengan kueri.</p>
+                          <p className="text-[10px] text-[#94a3b8]">Kirim masukan baru atau sesuaikan filter di atas.</p>
                         </div>
                       </td>
                     </tr>
@@ -527,7 +527,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
             {!loadingList && count > 0 && (
               <div className="flex items-center justify-between border-t border-gray-100 pt-6 mt-6">
                 <span className="text-[10px] text-[#64748B] font-bold uppercase tracking-wider">
-                  Total Reports: {count}
+                  Total Laporan: {count}
                 </span>
                 <div className="flex items-center space-x-2">
                   <button
@@ -538,7 +538,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   <span className="text-xs font-bold text-[#1E293B]">
-                    Page {page} of {totalPages}
+                    Halaman {page} dari {totalPages}
                   </span>
                   <button
                     disabled={page === totalPages}
@@ -567,7 +567,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
 
               <h3 className="text-sm font-bold text-[#1E293B] uppercase tracking-wider mb-6 flex items-center space-x-2">
                 <Terminal className="w-4 h-4 text-[#0EA5E9]" />
-                <span>Report Detail Analysis</span>
+                <span>Analisis Detail Laporan</span>
               </h3>
 
               {loadingDetail ? (
@@ -579,7 +579,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
               ) : detailError ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center text-red-500 space-y-2">
                   <AlertTriangle className="w-8 h-8" />
-                  <p className="text-xs font-bold">Error loading detail: {detailError}</p>
+                  <p className="text-xs font-bold">Gagal memuat detail: {detailError}</p>
                 </div>
               ) : detail ? (
                 <div className="space-y-6">
@@ -602,24 +602,24 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
 
                   {/* Device & Package Meta Info Grid */}
                   <div className="border-t border-gray-100 pt-6">
-                    <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Device & Package Telemetry</h4>
+                    <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Telemetri Perangkat & Paket</h4>
                     <div className="grid grid-cols-2 gap-4 text-xs font-sans">
                       
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Application</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Aplikasi</span>
                         <span className="font-bold text-[#1E293B]">{detail.application_name || 'Generic POS'}</span>
                       </div>
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Package Name</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Nama Paket</span>
                         <span className="font-mono text-[#64748B] text-[10px]">{detail.package_name}</span>
                       </div>
                       
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">App Version</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Versi Aplikasi</span>
                         <span className="font-bold text-[#1E293B]">v{detail.app_version}</span>
                       </div>
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Database Version</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Versi Database</span>
                         <span className="font-mono text-[#64748B]">{detail.database_version || 'N/A'}</span>
                       </div>
 
@@ -628,33 +628,33 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                         <span className="font-semibold text-[#1E293B]">Android {detail.android_version || 'N/A'} (API {detail.sdk_version || 'N/A'})</span>
                       </div>
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Build Type</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Tipe Build</span>
                         <span className="font-mono text-xs text-[#64748B]">{detail.build_type || 'RELEASE'}</span>
                       </div>
 
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Hardware Host</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Host Perangkat Keras</span>
                         <span className="font-semibold text-[#1E293B]">
                           {detail.manufacturer || ''} {detail.device_brand || ''} {detail.device_model || ''}
                         </span>
                         {detail.device_name && <span className="text-[10px] text-gray-400 block">({detail.device_name})</span>}
                       </div>
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">License ID</span>
-                        <span className="font-mono text-[10px] text-[#64748B] truncate block" title={detail.license_id}>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">ID Lisensi</span>
+                        <span className="font-mono text-[10px] text-[#64748B] truncate block" title={detail.license_id || ''}>
                           {detail.license_id}
                         </span>
                       </div>
 
                       {detail.whatsapp && (
                         <div>
-                          <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Contact WhatsApp</span>
+                          <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Kontak WhatsApp</span>
                           <span className="font-bold text-emerald-600 block">{detail.whatsapp}</span>
                         </div>
                       )}
                       
                       <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Collected Timestamp</span>
+                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Waktu Pengambilan</span>
                         <span className="text-gray-500 font-mono text-[10px]">
                           {new Date(detail.timestamp).toLocaleString('en-US', { hour12: false })}
                         </span>
@@ -666,19 +666,19 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   {/* Screenshot Section */}
                   {detail.screenshot_url && (
                     <div className="border-t border-gray-100 pt-6">
-                      <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Attached Screenshot</h4>
+                      <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Tangkapan Layar Terlampir</h4>
                       <div 
                         onClick={() => setLightboxUrl(detail.screenshot_url)}
                         className="relative max-w-full rounded-2xl overflow-hidden border border-gray-200 cursor-zoom-in hover:brightness-95 transition-all duration-300 shadow-sm"
                       >
                         <img 
                           src={detail.screenshot_url} 
-                          alt="Feedback Screenshot Attachment" 
+                          alt="Tangkapan Layar Masukan" 
                           className="max-h-48 object-cover w-full"
                         />
                         <div className="absolute bottom-3 right-3 bg-black/60 text-white rounded-lg p-1.5 flex items-center space-x-1">
                           <Eye className="w-3.5 h-3.5" />
-                          <span className="text-[8px] font-bold uppercase tracking-wider">Click to Expand</span>
+                          <span className="text-[8px] font-bold uppercase tracking-wider">Klik untuk Memperbesar</span>
                         </div>
                       </div>
                     </div>
@@ -687,7 +687,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   {/* Diagnostic Log */}
                   {detail.diagnostic_log && (
                     <div className="border-t border-gray-100 pt-6">
-                      <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Diagnostic Log Payload</h4>
+                      <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Payload Log Diagnostik</h4>
                       <pre className="bg-[#1E293B] text-gray-200 p-4 rounded-2xl text-[10px] font-mono overflow-auto max-h-48 whitespace-pre-wrap select-text">
                         {detail.diagnostic_log}
                       </pre>
@@ -696,11 +696,11 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
 
                   {/* Status & Developer Notes Form */}
                   <div className="border-t border-[#F0F2F5] pt-6 space-y-4">
-                    <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider">Developer Intervention</h4>
+                    <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider">Intervensi Pengembang</h4>
                     
                     {/* Status Management */}
                     <div>
-                      <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">Update Status Workflow</label>
+                      <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">Alur Kerja Pembaruan Status</label>
                       <div className="flex flex-wrap gap-2">
                         {['NEW', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'].map((st) => {
                           const statusVal = st as FeedbackStatus;
@@ -730,20 +730,20 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                       {/* Workflow help tip info box */}
                       <p className="text-[8.5px] text-[#94a3b8] font-semibold mt-2 uppercase tracking-wide flex items-center space-x-1.5">
                         <UserCheck className="w-3 h-3 text-[#0EA5E9]" />
-                        <span>Workflow: NEW ➔ IN_PROGRESS ➔ RESOLVED or REJECTED</span>
+                        <span>Alur kerja: NEW ➔ IN_PROGRESS ➔ RESOLVED atau REJECTED</span>
                       </p>
                     </div>
 
                     {/* Developer internal note */}
                     <div>
                       <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">
-                        Developer Note (Internal Notes Only)
+                        Catatan Pengembang (Hanya Catatan Internal)
                       </label>
                       <textarea
                         rows={3}
                         value={devNote}
                         onChange={(e) => setDevNote(e.target.value)}
-                        placeholder="Write down internal team resolutions, hardware issue logs, or debug remarks..."
+                        placeholder="Tulis resolusi tim internal, log masalah perangkat keras, atau catatan debug..."
                         className="w-full p-3 border border-gray-200 rounded-2xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none"
                       />
                     </div>
@@ -757,12 +757,12 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                       {savingDetail ? (
                         <>
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Saving Changes...</span>
+                          <span>Menyimpan Perubahan...</span>
                         </>
                       ) : (
                         <>
                           <ArrowRight className="w-3.5 h-3.5" />
-                          <span>Save Internals & Set Status</span>
+                          <span>Simpan Catatan & Atur Status</span>
                         </>
                       )}
                     </button>
