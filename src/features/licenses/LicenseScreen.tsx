@@ -400,8 +400,8 @@ export const LicenseScreen: React.FC = () => {
         </div>
       </section>
 
-      {/* 2. Glassmorphic Table Container */}
-      <div className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
+      {/* 2. Glassmorphic Table Container (Desktop Only) */}
+      <div className="hidden lg:block bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs min-w-[700px]">
             <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
@@ -535,6 +535,123 @@ export const LicenseScreen: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 2b. Cards Layout Container (Mobile Only) */}
+      <div className="block lg:hidden space-y-4">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="animate-pulse bg-white border border-gray-200 rounded-[20px] p-5 space-y-3">
+              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+              <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+              <div className="h-8 bg-gray-100 rounded"></div>
+            </div>
+          ))
+        ) : filteredLicenses.length === 0 ? (
+          <div className="bg-white border border-gray-200 rounded-[20px] p-8 text-center text-[#64748B] font-bold uppercase tracking-wider">
+            NO DATA IN DATABASE
+          </div>
+        ) : (
+          filteredLicenses.map((lic) => {
+            const isActive = lic.status === 'ACTIVE';
+            let statusBadge = 'bg-gray-100 text-gray-500 border border-gray-200';
+            
+            if (isActive) statusBadge = 'bg-sky-50 text-[#0EA5E9] border border-sky-100';
+            if (lic.status === 'EXPIRED') statusBadge = 'bg-red-50 text-red-500 border border-red-100';
+            if (lic.status === 'SUSPENDED') statusBadge = 'bg-amber-50 text-amber-600 border border-amber-100';
+            if (lic.status === 'PENDING') statusBadge = 'bg-yellow-50 text-yellow-600 border border-yellow-100 animate-pulse';
+
+            return (
+              <div key={lic.id} className="bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm">
+                <div className="flex justify-between items-start">
+                  <div className="font-mono font-bold text-xs select-all text-[#1E293B] break-all pr-2">
+                    {lic.license_key}
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wide flex-shrink-0 ${statusBadge}`}>
+                    {lic.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] text-[#64748B] pt-2.5 border-t border-gray-50">
+                  <div>
+                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">Customer</span>
+                    <span className="font-bold text-[#1E293B] block truncate max-w-[120px]">
+                      {lic.customers ? lic.customers.name : '-'}
+                    </span>
+                    {lic.customers?.phone && (
+                      <span className="text-[8px] text-sky-600 font-semibold uppercase block truncate max-w-[120px]">
+                        {lic.customers.phone}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">Device</span>
+                    <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">
+                      {lic.associated_device || 'UNBOUND'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">License Type</span>
+                    <span className="font-mono text-[#1E293B] font-semibold">{lic.type}</span>
+                  </div>
+                  <div>
+                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">Created Date</span>
+                    <span className="text-[#64748B] font-mono">{new Date(lic.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100 justify-end">
+                  <button
+                    onClick={() => handleOpenDetailModal(lic.customers)}
+                    className="bg-slate-100 hover:bg-sky-500 hover:text-white text-slate-600 text-[10px] font-black px-3 py-1.5 rounded-lg transition-all"
+                  >
+                    Detail
+                  </button>
+
+                  {isActive && (
+                    <button
+                      disabled={actionLoading !== null}
+                      onClick={() => handleSuspend(lic.id)}
+                      className="bg-white hover:bg-red-500 hover:text-white border border-gray-200 text-[10px] font-bold text-[#1E293B] px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      Suspend
+                    </button>
+                  )}
+
+                  {lic.status === 'SUSPENDED' && (
+                    <button
+                      disabled={actionLoading !== null}
+                      onClick={() => handleOpenSuspend(lic.id)}
+                      className="bg-emerald-50 hover:bg-emerald-500 hover:text-white border border-emerald-200 text-[10px] font-bold text-emerald-600 px-3 py-1.5 rounded-lg transition-all inline-flex items-center space-x-1"
+                    >
+                      <Unlock className="w-3 h-3" />
+                      <span>Activate</span>
+                    </button>
+                  )}
+                  
+                  {lic.associated_device && (
+                    <button
+                      disabled={actionLoading !== null}
+                      onClick={() => handleResetDevice(lic.id)}
+                      className="bg-white hover:bg-gray-100 border border-gray-200 text-[10px] font-bold text-[#1E293B] px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      Reset
+                    </button>
+                  )}
+
+                  <button
+                    disabled={actionLoading !== null}
+                    onClick={() => handleDeleteLicense(lic.id)}
+                    className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-200 text-[10px] font-bold text-red-600 px-3 py-1.5 rounded-lg transition-all inline-flex items-center space-x-1"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* 3. Generate Lifetime License & Customer Registration Overlay Modal */}

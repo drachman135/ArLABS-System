@@ -17,7 +17,8 @@ import {   RefreshCw,
   X,
   Key,
   AlertTriangle,
-  Bell
+  Bell,
+  Menu
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -41,6 +42,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [openDropdown, setOpenDropdown] = useState<'stats' | 'reports' | 'registry' | 'distribution' | 'broadcast' | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
 
   // Click outside to close dropdowns
   useEffect(() => {
@@ -188,7 +190,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           fetchDashboardData();
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Supabase Realtime 'notifications' subscription status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -300,10 +304,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] text-[#1E293B] font-['Outfit'] select-none p-8 overflow-x-hidden relative">
+    <div className="min-h-screen bg-[#F0F2F5] text-[#1E293B] font-['Outfit'] select-none p-4 sm:p-6 md:p-8 overflow-x-hidden relative">
 
-      {/* 1. TOP MENU BAR (Frosted Neumorphic Glass Panel) */}
-      <header className="max-w-7xl mx-auto bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-6 rounded-[24px] flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 gap-4">
+      {/* 1a. TOP MENU BAR - DESKTOP ONLY */}
+      <header className="hidden lg:flex max-w-7xl mx-auto bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-6 rounded-[24px] justify-between items-center mb-12 gap-4">
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-[8px] bg-gradient-to-tr from-[#0EA5E9] to-[#38bdf8] flex items-center justify-center font-bold text-white text-sm shadow-[0_2px_10px_rgba(14,165,233,0.3)]">
@@ -313,7 +317,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </div>
 
           {/* Tab Navigation Buttons */}
-          {/* Tab Navigation Buttons Grouped into Dropdowns */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {/* 1. Panel Ringkasan (Overview) */}
             <button
@@ -511,6 +514,217 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </button>
         </div>
       </header>
+
+      {/* 1b. TOP MENU BAR - MOBILE ONLY */}
+      <header className="flex lg:hidden justify-between items-center bg-white/80 backdrop-blur-md border border-white/60 shadow-md p-4 rounded-[20px] mb-6 gap-3 max-w-7xl mx-auto">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-[8px] bg-gradient-to-tr from-[#0EA5E9] to-[#38bdf8] flex items-center justify-center font-bold text-white text-sm shadow-[0_2px_10px_rgba(14,165,233,0.3)]">
+            Ar
+          </div>
+          <span className="text-[#1E293B] font-black tracking-tight text-xs">ArLABS</span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          {/* Mini connectivity */}
+          <div className="flex items-center px-2 py-1 bg-white/40 border border-white/60 rounded-lg text-[9px] font-bold">
+            <span className={`w-1.5 h-1.5 rounded-full mr-1 ${connected ? 'bg-[#0EA5E9] animate-pulse' : 'bg-red-400'}`} />
+            <span className={connected ? 'text-[#0EA5E9]' : 'text-red-400'}>{connected ? 'ONLINE' : 'OFFLINE'}</span>
+          </div>
+
+          <button
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="p-2 bg-white border border-gray-100 rounded-xl shadow-sm hover:bg-gray-50 text-[#1E293B]"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* Mobile Drawer Slide-over Panel */}
+      {isMobileDrawerOpen && (
+        <div 
+          onClick={() => setIsMobileDrawerOpen(false)}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 lg:hidden transition-opacity duration-300"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-72 max-w-[85vw] h-full bg-white shadow-2xl p-6 flex flex-col justify-between overflow-y-auto transform transition-transform duration-300"
+          >
+            <div className="space-y-6">
+              {/* Drawer Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-gray-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-[8px] bg-gradient-to-tr from-[#0EA5E9] to-[#38bdf8] flex items-center justify-center font-bold text-white text-sm shadow-[0_2px_10px_rgba(14,165,233,0.3)]">
+                    Ar
+                  </div>
+                  <span className="text-[#1E293B] font-black tracking-tight text-sm">ArLABS</span>
+                </div>
+                <button 
+                  onClick={() => setIsMobileDrawerOpen(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* User Profile Info Card */}
+              <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-2">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Operator Profile</p>
+                <h4 className="text-xs font-black text-[#1E293B] truncate">{profile?.name || 'Admin'}</h4>
+                <p className="text-[9px] font-mono text-gray-500 truncate">{profile?.email || 'admin@system.com'}</p>
+                <div className="flex items-center space-x-1.5 pt-1">
+                  <span className="text-[8px] font-bold uppercase bg-sky-50 text-[#0EA5E9] px-2 py-0.5 rounded border border-sky-100">
+                    {profile?.role || 'staff'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Navigation Items */}
+              <div className="space-y-4">
+                <p className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest pl-1">Navigasi Sistem</p>
+                <div className="flex flex-col space-y-1.5 text-xs">
+                  
+                  {/* Panel Ringkasan */}
+                  <button
+                    onClick={() => { setActiveView('dashboard'); setIsMobileDrawerOpen(false); }}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl font-bold transition-all ${
+                      activeView === 'dashboard' ? 'bg-[#0EA5E9] text-white shadow-sm' : 'text-[#64748B] hover:bg-slate-50'
+                    }`}
+                  >
+                    Panel Ringkasan
+                  </button>
+
+                  {/* Analisis & Statistik */}
+                  <div className="pt-1.5">
+                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Analisis & Statistik</p>
+                    <button
+                      onClick={() => { setActiveView('analytics'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'analytics' ? 'bg-[#6366F1] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Analisis Sistem ✦
+                    </button>
+                    <button
+                      onClick={() => { setActiveView('apkstats'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'apkstats' ? 'bg-[#6366F1] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Statistik APK ↓
+                    </button>
+                  </div>
+
+                  {/* Laporan Telemetri */}
+                  <div className="pt-1.5">
+                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Laporan Telemetri</p>
+                    <button
+                      onClick={() => { setActiveView('crash'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'crash' ? 'bg-red-500 text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Laporan Crash ⚠️
+                    </button>
+                    <button
+                      onClick={() => { setActiveView('feedback'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'feedback' ? 'bg-red-500 text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Pusat Masukan 💬
+                    </button>
+                  </div>
+
+                  {/* Registri Kemitraan */}
+                  <div className="pt-1.5">
+                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Registri Kemitraan</p>
+                    <button
+                      onClick={() => { setActiveView('licenses'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'licenses' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Registri Lisensi 🔑
+                    </button>
+                    <button
+                      onClick={() => { setActiveView('customers'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'customers' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Registri Pelanggan 👥
+                    </button>
+                  </div>
+
+                  {/* Rilis & Distribusi */}
+                  <div className="pt-1.5">
+                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Rilis & Distribusi</p>
+                    <button
+                      onClick={() => { setActiveView('applications'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'applications' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Kontrol Aplikasi 📱
+                    </button>
+                    <button
+                      onClick={() => { setActiveView('updates'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'updates' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Pembaruan OTA 📦
+                    </button>
+                  </div>
+
+                  {/* Siaran & Konfigurasi */}
+                  <div className="pt-1.5">
+                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Siaran & Konfigurasi</p>
+                    <button
+                      onClick={() => { setActiveView('notifications'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'notifications' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Siaran Push 🔔
+                    </button>
+                    <button
+                      onClick={() => { setActiveView('announcements'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'announcements' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Pengumuman In-App 📢
+                    </button>
+                    <button
+                      onClick={() => { setActiveView('config'); setIsMobileDrawerOpen(false); }}
+                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
+                        activeView === 'config' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
+                      }`}
+                    >
+                      Konfigurasi Jarak Jauh ⚙️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions in Drawer */}
+            <div className="pt-4 border-t border-gray-100">
+              <button
+                onClick={() => { onLogout(); setIsMobileDrawerOpen(false); }}
+                className="w-full py-2.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-200 transition-colors font-bold text-center text-xs"
+              >
+                Sign Out
+              </button>
+              <p className="text-center font-mono text-[8px] text-gray-400 mt-3 uppercase tracking-widest">
+                WAKTU: {currentTime || '00:00:00'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. MAIN VIEW SWITCHER */}
       {activeView === 'dashboard' ? (

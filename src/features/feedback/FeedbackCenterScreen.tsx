@@ -455,8 +455,8 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
               </div>
             </div>
 
-            {/* List Table Container */}
-            <div className="overflow-x-auto border border-gray-100 rounded-2xl">
+            {/* List Table Container (Desktop Only) */}
+            <div className="hidden lg:block overflow-x-auto border border-gray-100 rounded-2xl">
               <table className="w-full border-collapse text-left text-xs font-sans">
                 <thead>
                   <tr className="bg-[#F8FAFC] text-[#64748B] font-bold border-b border-gray-100">
@@ -468,7 +468,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                     <th className="p-4 uppercase tracking-wider text-[9px]">Dibuat Pada</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-55 text-[#1E293B]">
                   {loadingList ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
@@ -523,6 +523,46 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
               </table>
             </div>
 
+            {/* Mobile Card View */}
+            <div className="block lg:hidden space-y-4">
+              {loadingList ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="animate-pulse bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                    <div className="h-4 bg-gray-100 rounded w-2/3"></div>
+                    <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                  </div>
+                ))
+              ) : reports.length === 0 ? (
+                <div className="p-8 bg-white border border-gray-200 rounded-[20px] text-center text-[#64748B] font-bold">
+                  Tidak ada laporan
+                </div>
+              ) : (
+                reports.map(report => (
+                  <div 
+                    key={report.id}
+                    onClick={() => handleSelectReport(report.id)}
+                    className={`p-4 rounded-[20px] border bg-white space-y-3 transition-colors ${selectedId === report.id ? 'border-[#0EA5E9] bg-[#0EA5E9]/5 shadow-sm' : 'border-gray-200'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <Badge status={report.status} />
+                      <span className="text-[10px] text-[#94a3b8] font-mono">
+                        {new Date(report.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[#1E293B] text-xs">{report.title}</h4>
+                      <p className="text-[10px] text-[#64748B] mt-0.5">{report.category}</p>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] pt-2 border-t border-gray-50 text-[#64748B] font-mono">
+                      <span className="font-sans font-semibold">{report.application_name || 'Generic App'} (v{report.app_version})</span>
+                      <span>{(report.license_id || '').substring(0, 8)}...</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
             {/* Pagination Controls */}
             {!loadingList && count > 0 && (
               <div className="flex items-center justify-between border-t border-gray-100 pt-6 mt-6">
@@ -553,10 +593,18 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
           </Card>
         </section>
 
+        {/* Backdrop for mobile slide-out drawer */}
+        {selectedId && (
+          <div 
+            onClick={() => { setSelectedId(null); setDetail(null); }}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden"
+          />
+        )}
+
         {/* RIGHT COLUMN: SLIDING OR DETAILED REPORT PANE */}
         {selectedId && (
-          <section className="col-span-12 lg:col-span-5 space-y-6">
-            <Card className="p-6 relative select-text">
+          <section className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white/95 backdrop-blur-md shadow-2xl overflow-y-auto p-4 lg:p-0 lg:static lg:bg-transparent lg:shadow-none lg:w-auto lg:max-w-none lg:overflow-visible lg:col-span-5">
+            <Card className="p-6 relative select-text border-0 lg:border border-white/60 shadow-none lg:shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff]">
               {/* Close Button */}
               <button
                 onClick={() => { setSelectedId(null); setDetail(null); }}

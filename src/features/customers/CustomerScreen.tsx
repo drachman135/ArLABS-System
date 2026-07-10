@@ -249,84 +249,143 @@ export const CustomerScreen: React.FC = () => {
           <span className="text-xs text-[#64748B] font-bold tracking-widest uppercase">FETCHING_LIVE_STREAM...</span>
         </div>
       ) : (
-        <div className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[700px]">
-              <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
-                <tr>
-                  <th className="py-4 px-6">Customer Name</th>
-                  <th className="py-4 px-6">Email Address</th>
-                  <th className="py-4 px-6">WhatsApp</th>
-                  <th className="py-4 px-6">Ecommerce</th>
-                  <th className="py-4 px-6">Active Licenses</th>
-                  <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6 text-right">Registration Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-[#1E293B]">
-                {filteredCustomers.length === 0 ? (
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[700px]">
+                <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
-                      NO_ACTIVE_RECORDS_FOUND
-                    </td>
+                    <th className="py-4 px-6">Customer Name</th>
+                    <th className="py-4 px-6">Email Address</th>
+                    <th className="py-4 px-6">WhatsApp</th>
+                    <th className="py-4 px-6">Ecommerce</th>
+                    <th className="py-4 px-6">Active Licenses</th>
+                    <th className="py-4 px-6">Status</th>
+                    <th className="py-4 px-6 text-right">Registration Date</th>
                   </tr>
-                ) : (
-                  filteredCustomers.map((cust, idx) => {
-                    const isActive = cust.status === 'ACTIVE';
-                    const statusBadge = isActive 
-                      ? 'bg-sky-50 text-[#0EA5E9] border border-sky-100' 
-                      : 'bg-gray-100 text-gray-500 border border-gray-200';
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-[#1E293B]">
+                  {filteredCustomers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
+                        NO_ACTIVE_RECORDS_FOUND
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCustomers.map((cust, idx) => {
+                      const isActive = cust.status === 'ACTIVE';
+                      const statusBadge = isActive 
+                        ? 'bg-sky-50 text-[#0EA5E9] border border-sky-100' 
+                        : 'bg-gray-100 text-gray-500 border border-gray-200';
 
-                    return (
-                      <tr 
-                        key={cust.id} 
-                        onClick={() => handleSelectCustomer(cust)}
-                        className={`cursor-pointer transition-colors duration-200 hover:bg-sky-500/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
-                      >
-                        {/* Name */}
-                        <td className="py-4 px-6 font-bold text-[#1E293B]">
-                          {cust.name}
-                        </td>
+                      return (
+                        <tr 
+                          key={cust.id} 
+                          onClick={() => handleSelectCustomer(cust)}
+                          className={`cursor-pointer transition-colors duration-200 hover:bg-sky-500/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                        >
+                          {/* Name */}
+                          <td className="py-4 px-6 font-bold text-[#1E293B]">
+                            {cust.name}
+                          </td>
 
-                        {/* Email */}
-                        <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
-                          {cust.email}
-                        </td>
+                          {/* Email */}
+                          <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
+                            {cust.email}
+                          </td>
 
-                        {/* WhatsApp */}
-                        <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
-                          {cust.whatsapp}
-                        </td>
+                          {/* WhatsApp */}
+                          <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
+                            {cust.whatsapp}
+                          </td>
 
-                        {/* Ecommerce */}
-                        <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
-                          {cust.phone || '-'}
-                        </td>
+                          {/* Ecommerce */}
+                          <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
+                            {cust.phone || '-'}
+                          </td>
 
-                        {/* License count */}
-                        <td className="py-4 px-6 font-mono text-xs font-bold text-[#0EA5E9] pl-10">
-                          {cust.license_count}
-                        </td>
+                          {/* License count */}
+                          <td className="py-4 px-6 font-mono text-xs font-bold text-[#0EA5E9] pl-10">
+                            {cust.license_count}
+                          </td>
 
-                        {/* Status */}
-                        <td className="py-4 px-6">
-                          <span className={`px-2.5 py-1 rounded-full text-[8px] font-bold tracking-wide uppercase ${statusBadge}`}>
-                            {cust.status}
-                          </span>
-                        </td>
+                          {/* Status */}
+                          <td className="py-4 px-6">
+                            <span className={`px-2.5 py-1 rounded-full text-[8px] font-bold tracking-wide uppercase ${statusBadge}`}>
+                              {cust.status}
+                            </span>
+                          </td>
 
-                        {/* Registration Date */}
-                        <td className="py-4 px-6 text-right font-mono text-[10px] text-gray-400">
-                          {new Date(cust.created_at).toLocaleDateString('en-US')}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                          {/* Registration Date */}
+                          <td className="py-4 px-6 text-right font-mono text-[10px] text-gray-400">
+                            {new Date(cust.created_at).toLocaleDateString('en-US')}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile Card View */}
+          <div className="block lg:hidden space-y-4">
+            {filteredCustomers.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-[20px] p-8 text-center text-[#64748B] font-bold uppercase tracking-wider">
+                NO_ACTIVE_RECORDS_FOUND
+              </div>
+            ) : (
+              filteredCustomers.map((cust) => {
+                const isActive = cust.status === 'ACTIVE';
+                const statusBadge = isActive 
+                  ? 'bg-sky-50 text-[#0EA5E9] border border-sky-100' 
+                  : 'bg-gray-100 text-gray-500 border border-gray-200';
+
+                return (
+                  <div 
+                    key={cust.id} 
+                    onClick={() => handleSelectCustomer(cust)}
+                    className="cursor-pointer bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm hover:border-[#0EA5E9]/30 transition-all"
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className="font-bold text-sm text-[#1E293B] block truncate max-w-[170px]">
+                        {cust.name}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wide flex-shrink-0 ${statusBadge}`}>
+                        {cust.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px] text-[#64748B] pt-2.5 border-t border-gray-50">
+                      <div>
+                        <span className="block font-semibold text-[8px] text-gray-400 uppercase">Email</span>
+                        <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">{cust.email}</span>
+                      </div>
+                      <div>
+                        <span className="block font-semibold text-[8px] text-gray-400 uppercase">WhatsApp</span>
+                        <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">{cust.whatsapp}</span>
+                      </div>
+                      <div>
+                        <span className="block font-semibold text-[8px] text-gray-400 uppercase">Active Licenses</span>
+                        <span className="font-bold text-[#0EA5E9] font-mono text-xs">{cust.license_count}</span>
+                      </div>
+                      <div>
+                        <span className="block font-semibold text-[8px] text-gray-400 uppercase">Ecommerce</span>
+                        <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">{cust.phone || '-'}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="text-[9px] text-gray-400 text-right pt-1 font-mono">
+                      Registered: {new Date(cust.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </>
       )}
 
       {/* 3. Centered Customer Detail Modal (Neumorphic Hybrid View) */}

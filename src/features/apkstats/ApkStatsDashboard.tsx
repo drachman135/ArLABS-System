@@ -575,60 +575,101 @@ export const ApkStatsDashboard: React.FC = () => {
               subtitle="Publish releases via OTA Update module to see version analytics here."
             />
           ) : (
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[750px]">
-                  <thead className="bg-gray-50/80 border-b border-gray-100 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
-                    <tr>
-                      <th className="py-4 px-5">Version</th>
-                      <th className="py-4 px-5">Application</th>
-                      <th className="py-4 px-5">Release Date</th>
-                      <th className="py-4 px-5">Downloads</th>
-                      <th className="py-4 px-5">Installations</th>
-                      <th className="py-4 px-5">Adoption</th>
-                      <th className="py-4 px-5">Flags</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredVersions.map((v, i) => (
-                      <tr key={i} className={`hover:bg-gray-50/60 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/20'}`}>
-                        <td className="py-3.5 px-5">
-                          <p className="font-black text-[#0EA5E9] text-sm">{v.version_name}</p>
-                          <p className="text-[9px] text-[#94a3b8] font-mono">Code {v.version_code}</p>
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <p className="font-bold text-[#1E293B] truncate max-w-[160px]">{v.package_name}</p>
-                        </td>
-                        <td className="py-3.5 px-5 font-mono text-[10px] text-[#64748B]">
-                          {new Date(v.release_date).toLocaleDateString()}
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <span className="text-lg font-black text-[#1E293B]">{v.total_downloads}</span>
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <span className="text-lg font-black text-[#6366F1]">{v.active_installations}</span>
-                        </td>
-                        <td className="py-3.5 px-5">
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-[#10B981] rounded-full"
-                                style={{ width: `${v.adoption_percentage}%` }} />
-                            </div>
-                            <span className="text-[10px] font-bold text-[#64748B]">{v.adoption_percentage}%</span>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-5">
-                          {v.is_force_update
-                            ? <Badge label="Force" color="red" />
-                            : <Badge label="Optional" color="green" />
-                          }
-                        </td>
+            <>
+              {/* Desktop View */}
+              <Card className="hidden lg:block overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[750px]">
+                    <thead className="bg-gray-50/80 border-b border-gray-100 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
+                      <tr>
+                        <th className="py-4 px-5">Version</th>
+                        <th className="py-4 px-5">Application</th>
+                        <th className="py-4 px-5">Release Date</th>
+                        <th className="py-4 px-5">Downloads</th>
+                        <th className="py-4 px-5">Installations</th>
+                        <th className="py-4 px-5">Adoption</th>
+                        <th className="py-4 px-5">Flags</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredVersions.map((v, i) => (
+                        <tr key={i} className={`hover:bg-gray-50/60 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/20'}`}>
+                          <td className="py-3.5 px-5">
+                            <p className="font-black text-[#0EA5E9] text-sm">{v.version_name}</p>
+                            <p className="text-[9px] text-[#94a3b8] font-mono">Code {v.version_code}</p>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <p className="font-bold text-[#1E293B] truncate max-w-[160px]">{v.package_name}</p>
+                          </td>
+                          <td className="py-3.5 px-5 font-mono text-[10px] text-[#64748B]">
+                            {new Date(v.release_date).toLocaleDateString()}
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className="text-lg font-black text-[#1E293B]">{v.total_downloads}</span>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <span className="text-lg font-black text-[#6366F1]">{v.active_installations}</span>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-[#10B981] rounded-full"
+                                  style={{ width: `${v.adoption_percentage}%` }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-[#64748B]">{v.adoption_percentage}%</span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-5">
+                            {v.is_force_update
+                              ? <Badge label="Force" color="red" />
+                              : <Badge label="Optional" color="green" />
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Mobile View */}
+              <div className="block lg:hidden space-y-4">
+                {filteredVersions.map((v, i) => (
+                  <div key={i} className="bg-white border border-gray-200 rounded-[20px] p-4 space-y-3 shadow-sm">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-black text-sm text-[#0EA5E9]">{v.version_name}</h4>
+                        <span className="text-[9px] text-[#94a3b8] font-mono">Code {v.version_code}</span>
+                      </div>
+                      {v.is_force_update
+                        ? <Badge label="Force" color="red" />
+                        : <Badge label="Optional" color="green" />
+                      }
+                    </div>
+
+                    <p className="text-[10px] text-[#1E293B] font-mono truncate">{v.package_name}</p>
+
+                    <div className="grid grid-cols-3 gap-2 text-center pt-2.5 border-t border-gray-50 text-[10px] text-[#64748B]">
+                      <div>
+                        <span className="block font-bold text-[#1E293B] text-xs">{v.total_downloads}</span>
+                        <span className="text-[8px] text-gray-400 uppercase font-semibold">Downloads</span>
+                      </div>
+                      <div>
+                        <span className="block font-bold text-[#6366F1] text-xs">{v.active_installations}</span>
+                        <span className="text-[8px] text-gray-400 uppercase font-semibold">Installs</span>
+                      </div>
+                      <div>
+                        <span className="block font-bold text-[#10B981] text-xs">{v.adoption_percentage}%</span>
+                        <span className="text-[8px] text-gray-400 uppercase font-semibold">Adoption</span>
+                      </div>
+                    </div>
+                    <div className="text-[9px] text-gray-400 text-right pt-1 font-mono">
+                      Released: {new Date(v.release_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </Card>
+            </>
           )}
         </div>
       )}
@@ -693,77 +734,127 @@ export const ApkStatsDashboard: React.FC = () => {
             <p className="text-[10px] text-[#94a3b8] font-mono">{logsTotal} total records</p>
           </div>
 
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[800px]">
-                <thead className="bg-gray-50/80 border-b border-gray-100 text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
-                  <tr>
-                    <th className="py-4 px-5">Package</th>
-                    <th className="py-4 px-5">Version</th>
-                    <th className="py-4 px-5">Device</th>
-                    <th className="py-4 px-5">Android</th>
-                    <th className="py-4 px-5">Source</th>
-                    <th className="py-4 px-5">Status</th>
-                    <th className="py-4 px-5">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {loadingLogs ? (
-                    <tr>
-                      <td colSpan={7} className="py-10 text-center">
-                        <div className="flex items-center justify-center gap-2 text-[#94a3b8]">
-                          <RefreshCw className="w-4 h-4 animate-spin text-[#0EA5E9]" />
-                          <span className="text-xs font-bold">Loading download logs...</span>
+            <>
+              {/* Desktop View */}
+              <Card className="hidden lg:block overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[800px]">
+                    <thead className="bg-gray-50/80 border-b border-gray-100 text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
+                      <tr>
+                        <th className="py-4 px-5">Package</th>
+                        <th className="py-4 px-5">Version</th>
+                        <th className="py-4 px-5">Device</th>
+                        <th className="py-4 px-5">Android</th>
+                        <th className="py-4 px-5">Source</th>
+                        <th className="py-4 px-5">Status</th>
+                        <th className="py-4 px-5">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {loadingLogs ? (
+                        <tr>
+                          <td colSpan={7} className="py-10 text-center">
+                            <div className="flex items-center justify-center gap-2 text-[#94a3b8]">
+                              <RefreshCw className="w-4 h-4 animate-spin text-[#0EA5E9]" />
+                              <span className="text-xs font-bold">Loading download logs...</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : logs.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12">
+                            <EmptyState
+                              icon={<Activity className="w-10 h-10" />}
+                              title="No download logs yet"
+                              subtitle="Logs appear here once devices sync. Create the apk_download_logs table using the SQL below."
+                            />
+                          </td>
+                        </tr>
+                      ) : (
+                        logs.map((log, i) => (
+                          <tr key={log.id} className={`hover:bg-gray-50/60 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/20'}`}>
+                            <td className="py-3 px-5 font-mono text-[9px] text-[#64748B] max-w-[150px] truncate">
+                              {log.package_name}
+                            </td>
+                            <td className="py-3 px-5">
+                              <span className="font-black text-[#0EA5E9] text-[11px]">{log.version_name}</span>
+                            </td>
+                            <td className="py-3 px-5 text-[10px] text-[#64748B] max-w-[120px] truncate">
+                              {log.manufacturer ? `${log.manufacturer} ${log.device_model ?? ''}`.trim() : '—'}
+                            </td>
+                            <td className="py-3 px-5 text-[10px] text-[#64748B]">
+                              {log.android_version ? `Android ${log.android_version}` : '—'}
+                            </td>
+                            <td className="py-3 px-5">
+                              <Badge
+                                  label={log.download_source.replace('_', ' ')}
+                                  color={log.download_source === 'CLOUDFLARE_CDN' ? 'amber' : 'blue'}
+                                />
+                            </td>
+                            <td className="py-3 px-5">
+                              <Badge
+                                  label={log.status}
+                                  color={log.status === 'SUCCESS' ? 'green' : log.status === 'FAILED' ? 'red' : 'gray'}
+                                />
+                            </td>
+                            <td className="py-3 px-5 font-mono text-[9px] text-[#94a3b8]">
+                              {new Date(log.downloaded_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Mobile View */}
+              <div className="block lg:hidden space-y-4">
+                {loadingLogs ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="animate-pulse bg-white border border-gray-200 rounded-[20px] p-5 space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                      <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                      <div className="h-8 bg-gray-100 rounded"></div>
+                    </div>
+                  ))
+                ) : logs.length === 0 ? (
+                  <div className="bg-white border border-gray-200 rounded-[20px] p-8 text-center text-[#64748B] font-bold">
+                    No logs
+                  </div>
+                ) : (
+                  logs.map((log) => (
+                    <div key={log.id} className="bg-white border border-gray-200 rounded-[20px] p-4 space-y-3 shadow-sm font-mono text-[10px]">
+                      <div className="flex justify-between items-start font-sans">
+                        <div>
+                          <span className="font-black text-[#0EA5E9] text-xs">{log.version_name}</span>
+                          <p className="text-[9px] text-[#64748B] font-mono truncate max-w-[150px]">{log.package_name}</p>
                         </div>
-                      </td>
-                    </tr>
-                  ) : logs.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-12">
-                        <EmptyState
-                          icon={<Activity className="w-10 h-10" />}
-                          title="No download logs yet"
-                          subtitle="Logs appear here once devices sync. Create the apk_download_logs table using the SQL below."
-                        />
-                      </td>
-                    </tr>
-                  ) : (
-                    logs.map((log, i) => (
-                      <tr key={log.id} className={`hover:bg-gray-50/60 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/20'}`}>
-                        <td className="py-3 px-5 font-mono text-[9px] text-[#64748B] max-w-[150px] truncate">
-                          {log.package_name}
-                        </td>
-                        <td className="py-3 px-5">
-                          <span className="font-black text-[#0EA5E9] text-[11px]">{log.version_name}</span>
-                        </td>
-                        <td className="py-3 px-5 text-[10px] text-[#64748B] max-w-[120px] truncate">
-                          {log.manufacturer ? `${log.manufacturer} ${log.device_model ?? ''}`.trim() : '—'}
-                        </td>
-                        <td className="py-3 px-5 text-[10px] text-[#64748B]">
-                          {log.android_version ? `Android ${log.android_version}` : '—'}
-                        </td>
-                        <td className="py-3 px-5">
-                          <Badge
-                            label={log.download_source.replace('_', ' ')}
-                            color={log.download_source === 'CLOUDFLARE_CDN' ? 'amber' : 'blue'}
-                          />
-                        </td>
-                        <td className="py-3 px-5">
+                        <div className="flex flex-col items-end gap-1">
                           <Badge
                             label={log.status}
                             color={log.status === 'SUCCESS' ? 'green' : log.status === 'FAILED' ? 'red' : 'gray'}
                           />
-                        </td>
-                        <td className="py-3 px-5 font-mono text-[9px] text-[#94a3b8]">
-                          {new Date(log.downloaded_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                          <Badge
+                            label={log.download_source.replace('_', ' ')}
+                            color={log.download_source === 'CLOUDFLARE_CDN' ? 'amber' : 'blue'}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-[#64748B] pt-2 border-t border-gray-50 flex justify-between font-sans">
+                        <span>{log.manufacturer ? `${log.manufacturer} ${log.device_model ?? ''}` : '—'}</span>
+                        <span>{log.android_version ? `Android ${log.android_version}` : '—'}</span>
+                      </div>
+
+                      <div className="text-[9px] text-gray-400 text-right font-mono">
+                        {new Date(log.downloaded_at).toLocaleString()}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
 
           {logs.length < logsTotal && (
             <button

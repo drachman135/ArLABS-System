@@ -554,7 +554,8 @@ export const AnnouncementScreen: React.FC = () => {
             <span className="text-xs font-bold uppercase tracking-wider">Announcement History Logs</span>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
+          {/* Desktop Table View */}
+          <div className="hidden lg:block bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs min-w-[650px]">
                 <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
@@ -595,7 +596,7 @@ export const AnnouncementScreen: React.FC = () => {
                       } else if (ann.type === 'IMAGE_ONLY') {
                         typeBadge = 'bg-emerald-50 text-emerald-600 border border-emerald-100';
                       } else if (ann.type === 'TOP_BANNER') {
-                        typeBadge = 'bg-amber-50 text-amber-600 border border-amber-100';
+                        typeBadge = 'bg-amber-50 text-amber-600 border-amber-100';
                       }
 
                       const statusBadge = status === 'ACTIVE'
@@ -606,7 +607,6 @@ export const AnnouncementScreen: React.FC = () => {
 
                       return (
                         <tr key={ann.id} className={`hover:bg-gray-50/50 transition-colors duration-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/10'}`}>
-                          {/* Title & Preview Image Indicator */}
                           <td className="py-4 px-6 font-bold text-[#1E293B]">
                             <div className="flex items-center space-x-2">
                               <span>{ann.title}</span>
@@ -623,8 +623,6 @@ export const AnnouncementScreen: React.FC = () => {
                               )}
                             </div>
                           </td>
-
-                          {/* Target Scope */}
                           <td className="py-4 px-6 font-mono text-[10px] text-[#64748B] font-bold">
                             {ann.target_type === 'ALL' ? (
                               <span className="text-gray-400">ALL</span>
@@ -634,28 +632,20 @@ export const AnnouncementScreen: React.FC = () => {
                               </span>
                             )}
                           </td>
-
-                          {/* Type */}
                           <td className="py-4 px-6 font-mono text-[9px]">
                             <span className={`px-2 py-0.5 rounded font-bold uppercase ${typeBadge}`}>
                               {ann.type}
                             </span>
                           </td>
-
-                          {/* Date range */}
                           <td className="py-4 px-6 font-mono text-[10px] text-[#64748B] space-y-0.5">
                             <div>S: {new Date(ann.start_date).toLocaleDateString()} {new Date(ann.start_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}</div>
                             <div>E: {new Date(ann.end_date).toLocaleDateString()} {new Date(ann.end_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}</div>
                           </td>
-
-                          {/* Status */}
                           <td className="py-4 px-6 font-mono text-[9px]">
                             <span className={`px-2 py-0.5 rounded font-bold uppercase ${statusBadge}`}>
                               {status}
                             </span>
                           </td>
-
-                          {/* Action */}
                           <td className="py-4 px-6 text-right">
                             <button
                               onClick={() => handleDeleteAnnouncement(ann)}
@@ -673,6 +663,95 @@ export const AnnouncementScreen: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="block lg:hidden space-y-4">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="animate-pulse bg-white border border-gray-200 rounded-[20px] p-5 space-y-3">
+                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                  <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                  <div className="h-8 bg-gray-100 rounded"></div>
+                </div>
+              ))
+            ) : announcements.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-[20px] p-8 text-center text-[#64748B] font-bold uppercase tracking-wider">
+                NO_ANNOUNCEMENT_RECORDS_FOUND
+              </div>
+            ) : (
+              announcements.map((ann) => {
+                const status = getStatusText(ann.start_date, ann.end_date);
+                
+                let typeBadge = 'bg-gray-50 text-gray-600 border border-gray-100';
+                if (ann.type === 'CARD') {
+                  typeBadge = 'bg-purple-50 text-purple-600 border border-purple-100';
+                } else if (ann.type === 'MODAL') {
+                  typeBadge = 'bg-indigo-50 text-indigo-600 border border-indigo-100';
+                } else if (ann.type === 'IMAGE_ONLY') {
+                  typeBadge = 'bg-emerald-50 text-emerald-600 border border-emerald-100';
+                } else if (ann.type === 'TOP_BANNER') {
+                  typeBadge = 'bg-amber-50 text-amber-600 border-amber-100';
+                }
+
+                const statusBadge = status === 'ACTIVE'
+                  ? 'bg-green-50 text-green-600 border border-green-100'
+                  : status === 'SCHEDULED'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                  : 'bg-red-50 text-red-500 border border-red-100';
+
+                return (
+                  <div key={ann.id} className="bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center space-x-2 pr-2">
+                        <span className="font-bold text-xs text-[#1E293B]">{ann.title}</span>
+                        {ann.image_url && (
+                          <a 
+                            href={ann.image_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-[#0EA5E9]"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide flex-shrink-0 ${statusBadge}`}>
+                        {status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px] text-[#64748B] pt-2.5 border-t border-gray-50 font-mono">
+                      <div>
+                        <span className="block font-semibold text-[8px] text-gray-400 font-sans uppercase">Target</span>
+                        <span className="font-bold text-[#1E293B] block truncate max-w-[120px]">
+                          {ann.target_type === 'ALL' ? 'ALL' : (apps.find(a => a.package_name === ann.target_id)?.app_name || ann.target_id || 'APP')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block font-semibold text-[8px] text-gray-400 font-sans uppercase">Type</span>
+                        <span className={`px-1.5 py-0.5 rounded font-mono text-[8px] font-bold uppercase ${typeBadge}`}>{ann.type}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="block font-semibold text-[8px] text-gray-400 font-sans uppercase">Active Range</span>
+                        <span className="block text-[9px]">Start: {new Date(ann.start_date).toLocaleString()}</span>
+                        <span className="block text-[9px]">End: {new Date(ann.end_date).toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2 border-t border-gray-100">
+                      <button
+                        onClick={() => handleDeleteAnnouncement(ann)}
+                        className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-200 text-[10px] font-bold text-red-600 px-3 py-1.5 rounded-lg transition-all inline-flex items-center space-x-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

@@ -373,10 +373,21 @@ export const CrashReportScreen: React.FC = () => {
           )}
         </div>
 
+        {/* Backdrop for mobile drawer */}
+        {selectedIssue && (
+          <div 
+            onClick={() => setSelectedIssue(null)}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden"
+          />
+        )}
+
         {/* Right Panel: Detail View (4 columns) */}
-        <div className="lg:col-span-4">
+        <div className={`col-span-12 lg:col-span-4
+          fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white/95 backdrop-blur-md shadow-2xl overflow-y-auto p-4 lg:p-0 transition-transform duration-300
+          lg:static lg:bg-transparent lg:shadow-none lg:w-auto lg:max-w-none lg:overflow-visible lg:col-span-4
+          ${selectedIssue ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
           {selectedIssue ? (
-            <Card className="p-6 space-y-6 max-h-[85vh] overflow-y-auto animate-scale-up">
+            <Card className="p-6 space-y-6 max-h-[85vh] overflow-y-auto border-0 lg:border border-white/60 shadow-none lg:shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] animate-scale-up">
               
               {/* Header Title */}
               <div className="flex justify-between items-start border-b border-gray-100 pb-4">
@@ -540,7 +551,7 @@ export const CrashReportScreen: React.FC = () => {
 
             </Card>
           ) : (
-            <Card className="p-12 text-center text-[#94a3b8] flex flex-col justify-center items-center min-h-[350px]">
+            <Card className="hidden lg:flex p-12 text-center text-[#94a3b8] flex-col justify-center items-center min-h-[350px]">
               <MessageSquare className="w-8 h-8 opacity-40 mb-3" />
               <p className="text-xs font-black">No Issue Profile Selected</p>
               <p className="text-[10px] text-gray-400 mt-1">Select an issue on the left list to view diagnostic logs, stack trace, and device hardware profiling.</p>

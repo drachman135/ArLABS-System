@@ -1,0 +1,105 @@
+{
+  "project_info": {
+    "project_number": "164470119537",
+    "project_id": "ardevlabs-panel",
+    "storage_bucket": "ardevlabs-panel.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164470119537:android:29720c3218da7033fe4fd0",
+        "android_client_info": {
+          "package_name": "com.ardevlabs.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164470119537:android:924a3fc0d1821a15fe4fd0",
+        "android_client_info": {
+          "package_name": "com.ardevlabs.arlabsbase"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164470119537:android:1a9fc08e9dcbd871fe4fd0",
+        "android_client_info": {
+          "package_name": "com.ardevlabs.panel"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164470119537:android:2f65dbcaa8c9b38cfe4fd0",
+        "android_client_info": {
+          "package_name": "com.ardevlabs.pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:164470119537:android:bc40630775875973fe4fd0",
+        "android_client_info": {
+          "package_name": "com.ardevlabs.rental"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWIW92WeoXWK5Q0wmyv7KCstzXrPAzOmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

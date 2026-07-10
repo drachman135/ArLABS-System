@@ -594,7 +594,8 @@ export const NotificationScreen: React.FC = () => {
           <span className="text-xs font-bold uppercase tracking-wider">Outbound Broadcast Delivery Logs</span>
         </div>
 
-        <div className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
+        {/* Desktop Table View */}
+        <div className="hidden lg:block bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs min-w-[700px]">
               <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
@@ -667,6 +668,64 @@ export const NotificationScreen: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="block lg:hidden space-y-4">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="animate-pulse bg-white border border-gray-200 rounded-[20px] p-5 space-y-3">
+                <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                <div className="h-3 bg-gray-100 rounded w-1/2"></div>
+                <div className="h-8 bg-gray-100 rounded"></div>
+              </div>
+            ))
+          ) : logs.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-[20px] p-8 text-center text-[#64748B] font-bold uppercase tracking-wider">
+              NO_OUTBOUND_BROADCASTS_RECORDED_
+            </div>
+          ) : (
+            logs.map((log) => {
+              let badgeStyle = 'bg-yellow-50 text-yellow-600 border border-yellow-100';
+              if (log.status === 'SENT') {
+                badgeStyle = 'bg-green-50 text-green-600 border border-green-100';
+              } else if (log.status === 'FAILED') {
+                badgeStyle = 'bg-red-50 text-red-600 border border-red-100';
+              }
+
+              return (
+                <div key={log.id} className="bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <span className="font-bold text-xs text-[#1E293B] block truncate pr-2 max-w-[180px]">{log.title}</span>
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide flex-shrink-0 ${badgeStyle}`}>
+                      {log.status}
+                    </span>
+                  </div>
+                  
+                  <p className="text-[10px] text-[#64748B] leading-relaxed line-clamp-2">{log.body}</p>
+
+                  <div className="grid grid-cols-2 gap-2 text-[10px] text-[#64748B] pt-2.5 border-t border-gray-50 font-mono">
+                    <div>
+                      <span className="block font-semibold text-[8px] text-gray-400 font-sans uppercase">Target</span>
+                      <span className="font-bold text-[#1E293B] block truncate max-w-[120px]">
+                        {log.target_type} {log.target_id && `(${log.target_id})`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block font-semibold text-[8px] text-gray-400 font-sans uppercase">Scheduled</span>
+                      <span className="text-[#1E293B] block truncate max-w-[120px]">
+                        {log.scheduled_at ? new Date(log.scheduled_at).toLocaleDateString() : 'IMMEDIATE'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="text-[9px] text-gray-400 text-right pt-1 font-mono">
+                    Sent: {new Date(log.created_at).toLocaleString()}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </section>
 
