@@ -5,11 +5,17 @@ import { Search, Loader2, RefreshCw, X, User, Check, Unlock, Trash2 } from 'luci
 interface License {
   id: string;
   license_key: string;
-  type: 'TRIAL' | 'STANDARD' | 'PREMIUM' | 'LIFETIME';
+  type: string;
+  license_type?: string | null;
+  duration_days?: number | null;
   status: 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'PENDING';
   associated_device: string | null;
   customer_id?: string | null;
   created_at: string;
+  activated_at?: string | null;
+  expires_at?: string | null;
+  renewed_at?: string | null;
+  last_validation?: string | null;
   customers?: {
     id: string;
     name: string;
@@ -19,10 +25,17 @@ interface License {
   } | null;
 }
 
-const buildCustomerTemplate = (licenseKey: string, downloadUrl: string, isEarlyAccess: boolean) => {
+const buildCustomerTemplate = (licenseKey: string, downloadUrl: string, isEarlyAccess: boolean, licenseType: string, durationDays: number | null) => {
   const productText = isEarlyAccess ? 'ArLABS POS Early Access' : 'ArLABS POS';
   const userRoleText = isEarlyAccess ? 'pengguna Early Access' : 'pengguna';
   
+  let durationText = 'Lifetime License';
+  if (licenseType === 'TRIAL') {
+    durationText = `Trial License (${durationDays || 7} Hari)`;
+  } else if (licenseType !== 'LIFETIME' && durationDays) {
+    durationText = `Lisensi Berjangka (${durationDays} Hari)`;
+  }
+
   return `Halo 👋
 
 Terima kasih telah membeli ${productText}.
@@ -50,7 +63,7 @@ Penting
 • Aktivasi pertama membutuhkan koneksi internet.
 
 Sebagai ${userRoleText} Anda mendapatkan:
-• Lifetime License
+• ${durationText}
 • Gratis seluruh pembaruan dan perbaikan
 • Prioritas fitur berdasarkan masukan pengguna
 
@@ -61,8 +74,7 @@ Terima kasih telah mempercayai ArLABS POS.`;
 };
 
 export const LicenseScreen: React.FC = () => {
-  // Initial state defaults to empty array
-  const [licenses, setLicenses] = useState<any[]>([]);
+  const [licenses, setLicenses] = useState<License[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [searchKey, setSearchKey] = useState<string>('');
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -79,18 +91,63 @@ export const LicenseScreen: React.FC = () => {
   const [successKey, setSuccessKey] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   
-  // New Generator State
+  // Generator State
   const [generationMode, setGenerationMode] = useState<'EARLY_ACCESS' | 'RELEASE' | 'RE_GENERATE'>('EARLY_ACCESS');
   const [latestDownloadUrl, setLatestDownloadUrl] = useState<string>('https://link.arlabs.io/download-apk');
   const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
   const [showDetailedSuccess, setShowDetailedSuccess] = useState<boolean>(false);
   const [generatedTemplate, setGeneratedTemplate] = useState<string>('');
 
-  // Associated Customer Detail Modal state
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<License['customers'] | null>(null);
+  // License Duration System State
+  const [selectedLicenseType, setSelectedLicenseType] = useState<string>('LIFETIME');
+  const [customDays, setCustomDays] = useState<string>('30');
 
-  // Fetch latest download URL from application_versions table
+  // Renew License State
+  const [showRenewModal, setShowRenewModal] = useState<boolean>(false);
+  const [renewingLicense, setRenewingLicense] = useState<License | null>(null);
+  const [renewType, setRenewType] = useState<string>('30_DAYS');
+  const [renewCustomDays, setRenewCustomDays] = useState<string>('30');
+  const [renewFormLoading, setRenewFormLoading] = useState<boolean>(false);
+
+  // Filter State
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+
+  // Detail Modal state
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+  const [selectedLicense, setSelectedLicense] = useState<License | null>(null);
+
+  // Helper calculation for remaining days
+  const getRemainingDaysText = (lic: License) => {
+    const lType = lic.license_type || lic.type;
+    if (lType === 'LIFETIME') {
+      return 'Lifetime';
+    }
+    if (!lic.expires_at) {
+      return 'Pending Activation';
+    }
+    const now = new Date();
+    const exp = new Date(lic.expires_at);
+    if (exp < now) {
+      return 'Expired';
+    }
+    const diffMs = exp.getTime() - now.getTime();
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `${days} Days Remaining`;
+  };
+
+  const getExpirationText = (lic: License) => {
+    const lType = lic.license_type || lic.type;
+    if (lType === 'LIFETIME') {
+      return 'Lifetime';
+    }
+    if (!lic.expires_at) {
+      return 'Pending Activation';
+    }
+    return new Date(lic.expires_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // Fetch latest download URL
   const fetchLatestDownloadUrl = async () => {
     try {
       const { data, error } = await supabase
@@ -103,7 +160,6 @@ export const LicenseScreen: React.FC = () => {
       if (!error && data && data.length > 0) {
         setLatestDownloadUrl(data[0].download_url);
       } else {
-        // Fallback: try querying without is_active filter
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('application_versions')
           .select('download_url')
@@ -115,11 +171,11 @@ export const LicenseScreen: React.FC = () => {
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch latest APK download URL from application_versions:', err);
+      console.warn('Failed to fetch latest APK download URL:', err);
     }
   };
 
-  // Fetch licenses from database with LEFT JOIN to pull customer profile details
+  // Fetch licenses
   const fetchLicenses = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -141,15 +197,13 @@ export const LicenseScreen: React.FC = () => {
     try {
       const { error } = await supabase
         .from('licenses')
-        .update({ status: 'SUSPENDED' })
+        .update({ status: 'SUSPENDED', updated_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
-
-      // Update state locally upon success
       setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, status: 'SUSPENDED' } : lic));
     } catch (err) {
-      console.error('Failed to suspend license row: ', err);
+      console.error('Failed to suspend license: ', err);
     } finally {
       setActionLoading(null);
     }
@@ -159,7 +213,7 @@ export const LicenseScreen: React.FC = () => {
   const handleResetDevice = async (id: string) => {
     setActionLoading(id);
     try {
-      // 1. Directly delete from public.devices table
+      // 1. Delete associated device record
       const { error: deleteError } = await supabase
         .from('devices')
         .delete()
@@ -167,16 +221,27 @@ export const LicenseScreen: React.FC = () => {
 
       if (deleteError) throw deleteError;
 
-      // 2. Explicitly update the licenses table to ensure status is PENDING and associated_device is UNBOUND (bypassing any buggy DB triggers)
+      // 2. Clear activation states, leaving duration and type intact
       const { error: updateError } = await supabase
         .from('licenses')
-        .update({ status: 'PENDING', associated_device: 'UNBOUND' })
+        .update({ 
+          status: 'PENDING', 
+          associated_device: 'UNBOUND',
+          activated_at: null,
+          expires_at: null,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id);
 
       if (updateError) throw updateError;
 
-      // Update state locally upon success
-      setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, associated_device: null, status: 'PENDING' } : lic));
+      setLicenses(prev => prev.map(lic => lic.id === id ? { 
+        ...lic, 
+        associated_device: 'UNBOUND', 
+        status: 'PENDING',
+        activated_at: null,
+        expires_at: null
+      } : lic));
       window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
       console.error('Reset device failed: ', err);
@@ -186,7 +251,7 @@ export const LicenseScreen: React.FC = () => {
     }
   };
 
-  // Reactivate / Open Suspend License Status
+  // Reactivate / Open Suspend
   const handleOpenSuspend = async (id: string) => {
     const confirmActivation = window.confirm("Apakah Anda yakin ingin mengaktifkan kembali lisensi ini?");
     if (!confirmActivation) return;
@@ -195,12 +260,10 @@ export const LicenseScreen: React.FC = () => {
     try {
       const { error } = await supabase
         .from('licenses')
-        .update({ status: 'ACTIVE' })
+        .update({ status: 'ACTIVE', updated_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
-
-      // Update state locally upon success
       setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, status: 'ACTIVE' } : lic));
       window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
@@ -211,14 +274,13 @@ export const LicenseScreen: React.FC = () => {
     }
   };
 
-  // Delete License permanently (Wipeout)
+  // Delete License permanently
   const handleDeleteLicense = async (id: string) => {
     const confirmDelete = window.confirm("PERINGATAN: Menghapus lisensi ini akan menghapus semua data perangkat yang tertaut secara permanen. Lanjutkan?");
     if (!confirmDelete) return;
 
     setActionLoading(id);
     try {
-      // Step 1: Delete associated devices first (due to database constraint)
       const { error: deviceError } = await supabase
         .from('devices')
         .delete()
@@ -226,7 +288,6 @@ export const LicenseScreen: React.FC = () => {
 
       if (deviceError) throw deviceError;
 
-      // Step 2: Delete the license row
       const { error: licenseError } = await supabase
         .from('licenses')
         .delete()
@@ -234,7 +295,6 @@ export const LicenseScreen: React.FC = () => {
 
       if (licenseError) throw licenseError;
 
-      // Update state locally upon success
       setLicenses(prev => prev.filter(lic => lic.id !== id));
       window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
@@ -245,12 +305,12 @@ export const LicenseScreen: React.FC = () => {
     }
   };
 
+  // Generate License
   const handleGenerateLicense = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(true);
 
     try {
-      // Fetch latest download URL dynamically to ensure it is fresh
       let apkUrl = latestDownloadUrl;
       try {
         const { data, error } = await supabase
@@ -263,31 +323,19 @@ export const LicenseScreen: React.FC = () => {
         if (!error && data && data.length > 0) {
           apkUrl = data[0].download_url;
           setLatestDownloadUrl(apkUrl);
-        } else {
-          // Try fetching without active filter
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from('application_versions')
-            .select('download_url')
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          if (!fallbackError && fallbackData && fallbackData.length > 0) {
-            apkUrl = fallbackData[0].download_url;
-            setLatestDownloadUrl(apkUrl);
-          }
         }
       } catch (err) {
         console.warn('Failed to fetch latest APK download URL on submit:', err);
       }
 
-      // Step A: Insert into public.customers
+      // Step A: Insert Customer
       const { data: customerData, error: customerError } = await supabase
         .from('customers')
         .insert([{
           name: customerName,
           email: customerEmail,
           whatsapp: customerWhatsapp,
-          phone: customerEcommerce, // Ecommerce name stored in phone column
+          phone: customerEcommerce,
           status: 'ACTIVE'
         }])
         .select()
@@ -301,7 +349,7 @@ export const LicenseScreen: React.FC = () => {
 
       const newlyCreatedCustomerId = customerData.id;
 
-      // Step B: Generate unique key and insert license
+      // Step B: Determine Duration and Insert License
       const generateUniqueKey = () => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         const segment = (len: number) => Array.from({length: len}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -309,14 +357,26 @@ export const LicenseScreen: React.FC = () => {
       };
       const generatedKey = generateUniqueKey();
 
+      let finalType = selectedLicenseType === 'LIFETIME' ? 'LIFETIME' : 'TRIAL';
+      let finalLicenseType = selectedLicenseType;
+      let finalDurationDays: number | null = null;
+      if (selectedLicenseType === 'TRIAL') finalDurationDays = 7;
+      else if (selectedLicenseType === '30_DAYS') finalDurationDays = 30;
+      else if (selectedLicenseType === '90_DAYS') finalDurationDays = 90;
+      else if (selectedLicenseType === '180_DAYS') finalDurationDays = 180;
+      else if (selectedLicenseType === '365_DAYS') finalDurationDays = 365;
+      else if (selectedLicenseType === 'CUSTOM') finalDurationDays = parseInt(customDays) || 30;
+
       const { error: licenseError } = await supabase
         .from('licenses')
         .insert([{
           license_key: generatedKey,
           customer_id: newlyCreatedCustomerId,
-          license_type: 'LIFETIME',
-          type: 'LIFETIME',
+          license_type: finalLicenseType,
+          type: finalType,
+          duration_days: finalDurationDays,
           status: 'PENDING',
+          associated_device: 'UNBOUND',
           created_at: new Date().toISOString()
         }]);
 
@@ -326,29 +386,24 @@ export const LicenseScreen: React.FC = () => {
         return;
       }
 
-      // UI STATE REFRESH:
       setSuccessKey(generatedKey);
       setCopied(false);
 
       if (generationMode === 'RE_GENERATE') {
         setShowDetailedSuccess(false);
       } else {
-        const template = buildCustomerTemplate(generatedKey, apkUrl, generationMode === 'EARLY_ACCESS');
+        const template = buildCustomerTemplate(generatedKey, apkUrl, generationMode === 'EARLY_ACCESS', finalType, finalDurationDays);
         setGeneratedTemplate(template);
         setShowDetailedSuccess(true);
         setCopiedTemplate(false);
       }
 
-      // Automatically clear the form inputs
       setCustomerName('');
       setCustomerEmail('');
       setCustomerWhatsapp('');
       setCustomerEcommerce('');
-      
-      // Close form modal
       setShowModal(false);
 
-      // Trigger a state refresh for the customer list and license list tables
       await fetchLicenses();
       window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
@@ -358,17 +413,98 @@ export const LicenseScreen: React.FC = () => {
     }
   };
 
-  const handleOpenDetailModal = (cust: License['customers']) => {
-    setSelectedCustomer(cust);
+  // Renew License
+  const handleRenewLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renewingLicense) return;
+    setRenewFormLoading(true);
+
+    try {
+      let finalType = renewType === 'LIFETIME' ? 'LIFETIME' : 'TRIAL';
+      let finalLicenseType = renewType;
+      let finalDurationDays: number | null = null;
+      if (renewType === 'LIFETIME') finalDurationDays = null;
+      else if (renewType === 'TRIAL') finalDurationDays = 7;
+      else if (renewType === '30_DAYS') finalDurationDays = 30;
+      else if (renewType === '90_DAYS') finalDurationDays = 90;
+      else if (renewType === '180_DAYS') finalDurationDays = 180;
+      else if (renewType === '365_DAYS') finalDurationDays = 365;
+      else if (renewType === 'CUSTOM') finalDurationDays = parseInt(renewCustomDays) || 30;
+
+      let newExpiresAt: string | null = null;
+      const now = new Date();
+
+      if (finalLicenseType !== 'LIFETIME' && finalDurationDays !== null) {
+        let baseDate = now;
+        // Extend existing expiry if active and not already expired
+        if (renewingLicense.expires_at && new Date(renewingLicense.expires_at) > now) {
+          baseDate = new Date(renewingLicense.expires_at);
+        }
+        baseDate.setDate(baseDate.getDate() + finalDurationDays);
+        newExpiresAt = baseDate.toISOString();
+      }
+
+      const { error } = await supabase
+        .from('licenses')
+        .update({
+          license_type: finalLicenseType,
+          type: finalType,
+          duration_days: finalDurationDays,
+          expires_at: newExpiresAt,
+          status: 'ACTIVE', // Sets back to active (reactivates expired/pending if necessary)
+          renewed_at: now.toISOString(),
+          updated_at: now.toISOString()
+        })
+        .eq('id', renewingLicense.id);
+
+      if (error) throw error;
+
+      alert('License renewed successfully.');
+      setShowRenewModal(false);
+      setRenewingLicense(null);
+      await fetchLicenses();
+      window.dispatchEvent(new Event('db-refresh'));
+    } catch (err: any) {
+      console.error('Failed to renew license: ', err);
+      alert(`Failed to renew license: ${err.message}`);
+    } finally {
+      setRenewFormLoading(false);
+    }
+  };
+
+  const handleOpenRenewModal = (lic: License) => {
+    setRenewingLicense(lic);
+    setRenewType(lic.license_type || lic.type || '30_DAYS');
+    setRenewCustomDays(lic.duration_days ? String(lic.duration_days) : '30');
+    setShowRenewModal(true);
+  };
+
+  const handleOpenDetailModal = (lic: License) => {
+    setSelectedLicense(lic);
     setIsDetailModalOpen(true);
   };
 
-  // Filter keys
-  const filteredLicenses = licenses.filter(lic => 
-    lic.license_key.toLowerCase().includes(searchKey.toLowerCase()) ||
-    (lic.associated_device && lic.associated_device.toLowerCase().includes(searchKey.toLowerCase())) ||
-    lic.type.toLowerCase().includes(searchKey.toLowerCase())
-  );
+  // Advanced Filtering
+  const filteredLicenses = licenses.filter(lic => {
+    const matchesSearch = 
+      lic.license_key.toLowerCase().includes(searchKey.toLowerCase()) ||
+      (lic.associated_device && lic.associated_device.toLowerCase().includes(searchKey.toLowerCase())) ||
+      (lic.customers && lic.customers.name.toLowerCase().includes(searchKey.toLowerCase()));
+
+    const matchesStatus = statusFilter === 'ALL' || lic.status === statusFilter;
+
+    const lType = lic.license_type || lic.type;
+    const matchesType = typeFilter === 'ALL' || 
+      (typeFilter === 'LIFETIME' && lType === 'LIFETIME') ||
+      (typeFilter === 'TRIAL' && lType === 'TRIAL') ||
+      (typeFilter === '30_DAYS' && lType === '30_DAYS') ||
+      (typeFilter === '90_DAYS' && (lType === '90_DAYS' || lType === '3_MONTHS')) ||
+      (typeFilter === '180_DAYS' && (lType === '180_DAYS' || lType === '6_MONTHS')) ||
+      (typeFilter === '365_DAYS' && (lType === '365_DAYS' || lType === '1_YEAR')) ||
+      (typeFilter === 'CUSTOM' && lType === 'CUSTOM');
+
+    return matchesSearch && matchesStatus && matchesType;
+  });
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 font-['Outfit'] select-none">
@@ -380,7 +516,7 @@ export const LicenseScreen: React.FC = () => {
           <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1">SYS // LICENSE_REGISTRY</h3>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           {/* Search Field */}
           <div className="relative flex-grow sm:flex-grow-0">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
@@ -389,14 +525,43 @@ export const LicenseScreen: React.FC = () => {
               placeholder="Search keys..."
               value={searchKey}
               onChange={(e) => setSearchKey(e.target.value)}
-              className="pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] placeholder:text-[#64748B]/60 focus:outline-none focus:border-[#0EA5E9] focus:ring-1 focus:ring-[#0EA5E9] transition-all duration-300 w-full sm:w-48 shadow-sm"
+              className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] placeholder:text-[#64748B]/60 focus:outline-none focus:border-[#0EA5E9] focus:ring-1 focus:ring-[#0EA5E9] transition-all duration-300 w-full sm:w-40 shadow-sm"
             />
           </div>
+
+          {/* Type Filter */}
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer"
+          >
+            <option value="ALL">All Types</option>
+            <option value="LIFETIME">Lifetime</option>
+            <option value="TRIAL">Trial</option>
+            <option value="30_DAYS">30 Days</option>
+            <option value="90_DAYS">3 Months</option>
+            <option value="180_DAYS">6 Months</option>
+            <option value="365_DAYS">1 Year</option>
+            <option value="CUSTOM">Custom</option>
+          </select>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer"
+          >
+            <option value="ALL">All Status</option>
+            <option value="PENDING">Pending</option>
+            <option value="ACTIVE">Active</option>
+            <option value="EXPIRED">Expired</option>
+            <option value="SUSPENDED">Suspended</option>
+          </select>
 
           {/* Sync Trigger */}
           <button
             onClick={fetchLicenses}
-            className="border border-white bg-white hover:border-[#0EA5E9]/50 hover:bg-[#0EA5E9]/10 text-[#1E293B] hover:text-[#0EA5E9] p-2.5 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+            className="border border-white bg-white hover:border-[#0EA5E9]/50 hover:bg-[#0EA5E9]/10 text-[#1E293B] hover:text-[#0EA5E9] p-2 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -404,9 +569,9 @@ export const LicenseScreen: React.FC = () => {
           {/* Generate trigger */}
           <button
             onClick={() => setShowModal(true)}
-            className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/95 text-white font-bold text-xs py-2.5 px-5 rounded-xl transition-all duration-300 shadow-[2px_2px_5px_rgba(14,165,233,0.3)] active:scale-95 uppercase tracking-wide"
+            className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/95 text-white font-bold text-xs py-2 px-4 rounded-xl transition-all duration-300 shadow-[2px_2px_5px_rgba(14,165,233,0.3)] active:scale-95 uppercase tracking-wide border-none"
           >
-            [ + Generate Lifetime License ]
+            [ + Generate License ]
           </button>
         </div>
       </section>
@@ -414,12 +579,13 @@ export const LicenseScreen: React.FC = () => {
       {/* 2. Glassmorphic Table Container (Desktop Only) */}
       <div className="hidden lg:block bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] rounded-[24px] overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[700px]">
+          <table className="w-full text-left text-xs min-w-[800px]">
             <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
               <tr>
                 <th className="py-4 px-6">LICENSE_KEY</th>
                 <th className="py-4 px-6">CUSTOMER / ECOMMERCE</th>
-                <th className="py-4 px-6">TYPE</th>
+                <th className="py-4 px-6">TYPE / DURATION</th>
+                <th className="py-4 px-6">EXPIRES / REMAINING</th>
                 <th className="py-4 px-6">STATUS</th>
                 <th className="py-4 px-6">ASSOCIATED_DEVICE</th>
                 <th className="py-4 px-6 text-right">ACTIONS</th>
@@ -428,7 +594,7 @@ export const LicenseScreen: React.FC = () => {
             <tbody className="divide-y divide-gray-100 text-[#1E293B]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#64748B]">
+                  <td colSpan={7} className="py-12 text-center text-[#64748B]">
                     <div className="flex items-center justify-center space-x-2">
                       <Loader2 className="w-4 h-4 animate-spin text-[#0EA5E9]" />
                       <span>FETCHING_LIVE_STREAM...</span>
@@ -437,7 +603,7 @@ export const LicenseScreen: React.FC = () => {
                 </tr>
               ) : filteredLicenses.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
+                  <td colSpan={7} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
                     NO DATA IN DATABASE
                   </td>
                 </tr>
@@ -450,6 +616,8 @@ export const LicenseScreen: React.FC = () => {
                   if (lic.status === 'EXPIRED') statusBadge = 'bg-red-50 text-red-500 border border-red-100';
                   if (lic.status === 'SUSPENDED') statusBadge = 'bg-amber-50 text-amber-600 border border-amber-100';
                   if (lic.status === 'PENDING') statusBadge = 'bg-yellow-50 text-yellow-600 border border-yellow-100 animate-pulse';
+
+                  const remDaysText = getRemainingDaysText(lic);
 
                   return (
                     <tr key={lic.id} className={`transition-colors duration-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
@@ -470,9 +638,24 @@ export const LicenseScreen: React.FC = () => {
                         )}
                       </td>
 
-                      {/* License Type */}
-                      <td className="py-4 px-6 font-mono text-[10px] text-[#64748B] font-semibold">
-                        {lic.type}
+                      {/* License Type / Duration */}
+                      <td className="py-4 px-6">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-[10px] text-[#1E293B] font-bold uppercase">{lic.license_type || lic.type}</span>
+                          {lic.duration_days && (
+                            <span className="text-[9px] text-[#64748B] font-semibold">{lic.duration_days} Days</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Expires / Remaining */}
+                      <td className="py-4 px-6">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-[10px] text-[#1E293B]">{getExpirationText(lic)}</span>
+                          <span className={`text-[9px] font-bold ${remDaysText === 'Expired' ? 'text-red-500 font-black' : 'text-[#64748B]'}`}>
+                            {remDaysText}
+                          </span>
+                        </div>
                       </td>
 
                       {/* License Status */}
@@ -488,42 +671,48 @@ export const LicenseScreen: React.FC = () => {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
-                        {/* Owner Detail Button */}
+                      <td className="py-4 px-6 text-right space-x-1 whitespace-nowrap">
                         <button
-                          onClick={() => handleOpenDetailModal(lic.customers)}
-                          className="bg-slate-100 hover:bg-sky-500 hover:text-white text-slate-600 border border-slate-200 hover:border-transparent text-[10px] font-black px-2.5 py-1.5 rounded-lg transition-all duration-300 shadow-sm"
+                          onClick={() => handleOpenDetailModal(lic)}
+                          className="bg-slate-100 hover:bg-[#1E293B] hover:text-white text-slate-600 border border-slate-200 hover:border-transparent text-[10px] font-bold px-2 py-1 rounded-lg transition-all duration-300"
                         >
                           Detail
+                        </button>
+
+                        <button
+                          disabled={actionLoading !== null}
+                          onClick={() => handleOpenRenewModal(lic)}
+                          className="bg-sky-50 hover:bg-[#0EA5E9] hover:text-white border border-sky-100 hover:border-transparent text-[10px] font-bold text-sky-600 px-2 py-1 rounded-lg transition-all duration-300"
+                        >
+                          Renew
                         </button>
 
                         {isActive && (
                           <button
                             disabled={actionLoading !== null}
                             onClick={() => handleSuspend(lic.id)}
-                            className="bg-white hover:bg-red-500 hover:text-white border border-gray-200 hover:border-transparent text-[11px] font-bold text-[#1E293B] px-2.5 py-1.5 rounded-lg transition-all duration-300 shadow-sm"
+                            className="bg-white hover:bg-red-500 hover:text-white border border-gray-200 hover:border-transparent text-[10px] font-bold text-[#1E293B] px-2 py-1 rounded-lg transition-all duration-300"
                           >
                             Suspend
                           </button>
                         )}
 
-                        {(lic.status === 'SUSPENDED' || lic.status === 'INACTIVE') && (
+                        {lic.status === 'SUSPENDED' && (
                           <button
                             disabled={actionLoading !== null}
                             onClick={() => handleOpenSuspend(lic.id)}
-                            className="bg-emerald-50 hover:bg-emerald-500 hover:text-white border border-emerald-200 hover:border-transparent text-[11px] font-bold text-emerald-600 px-2.5 py-1.5 rounded-lg transition-all duration-300 shadow-sm inline-flex items-center space-x-1"
-                            title="Open Suspend"
+                            className="bg-emerald-50 hover:bg-emerald-500 hover:text-white border border-emerald-200 hover:border-transparent text-[10px] font-bold text-emerald-600 px-2 py-1 rounded-lg transition-all duration-300 inline-flex items-center space-x-1"
                           >
                             <Unlock className="w-3 h-3" />
                             <span>Activate</span>
                           </button>
                         )}
                         
-                        {lic.associated_device && (
+                        {lic.associated_device && lic.associated_device !== 'UNBOUND' && (
                           <button
                             disabled={actionLoading !== null}
                             onClick={() => handleResetDevice(lic.id)}
-                            className="bg-white hover:bg-gray-100 border border-gray-200 text-[11px] font-bold text-[#1E293B] px-2.5 py-1.5 rounded-lg transition-all duration-300 shadow-sm"
+                            className="bg-white hover:bg-gray-100 border border-gray-200 text-[10px] font-bold text-[#1E293B] px-2 py-1 rounded-lg transition-all duration-300"
                           >
                             Reset Device
                           </button>
@@ -532,8 +721,7 @@ export const LicenseScreen: React.FC = () => {
                         <button
                           disabled={actionLoading !== null}
                           onClick={() => handleDeleteLicense(lic.id)}
-                          className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-200 hover:border-transparent text-[11px] font-bold text-red-600 px-2.5 py-1.5 rounded-lg transition-all duration-300 shadow-sm inline-flex items-center space-x-1"
-                          title="Delete License"
+                          className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-150 hover:border-transparent text-[10px] font-bold text-red-600 px-2 py-1 rounded-lg transition-all duration-300 inline-flex items-center space-x-1 animate-pulse"
                         >
                           <Trash2 className="w-3 h-3" />
                           <span>Delete</span>
@@ -572,6 +760,8 @@ export const LicenseScreen: React.FC = () => {
             if (lic.status === 'SUSPENDED') statusBadge = 'bg-amber-50 text-amber-600 border border-amber-100';
             if (lic.status === 'PENDING') statusBadge = 'bg-yellow-50 text-yellow-600 border border-yellow-100 animate-pulse';
 
+            const remDaysText = getRemainingDaysText(lic);
+
             return (
               <div key={lic.id} className="bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm">
                 <div className="flex justify-between items-start">
@@ -603,20 +793,31 @@ export const LicenseScreen: React.FC = () => {
                   </div>
                   <div>
                     <span className="block font-semibold text-[8px] text-gray-400 uppercase">License Type</span>
-                    <span className="font-mono text-[#1E293B] font-semibold">{lic.type}</span>
+                    <span className="font-mono text-[#1E293B] font-bold">{lic.license_type || lic.type}</span>
+                    {lic.duration_days && (
+                      <span className="text-[9px] text-[#64748B] font-semibold block">{lic.duration_days} Days</span>
+                    )}
                   </div>
                   <div>
-                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">Created Date</span>
-                    <span className="text-[#64748B] font-mono">{new Date(lic.created_at).toLocaleDateString()}</span>
+                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">Expiration / Remaining</span>
+                    <span className="text-[#1E293B] font-bold block">{getExpirationText(lic)}</span>
+                    <span className={`text-[9.5px] font-bold block ${remDaysText === 'Expired' ? 'text-red-500' : 'text-[#64748B]'}`}>{remDaysText}</span>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100 justify-end">
+                <div className="flex flex-wrap gap-1.5 pt-3 border-t border-gray-100 justify-end">
                   <button
-                    onClick={() => handleOpenDetailModal(lic.customers)}
-                    className="bg-slate-100 hover:bg-sky-500 hover:text-white text-slate-600 text-[10px] font-black px-3 py-1.5 rounded-lg transition-all"
+                    onClick={() => handleOpenDetailModal(lic)}
+                    className="bg-slate-100 hover:bg-[#1E293B] hover:text-white text-slate-600 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all"
                   >
                     Detail
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenRenewModal(lic)}
+                    className="bg-sky-50 hover:bg-[#0EA5E9] hover:text-white text-sky-600 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all"
+                  >
+                    Renew
                   </button>
 
                   {isActive && (
@@ -629,7 +830,7 @@ export const LicenseScreen: React.FC = () => {
                     </button>
                   )}
 
-                  {(lic.status === 'SUSPENDED' || lic.status === 'INACTIVE') && (
+                  {lic.status === 'SUSPENDED' && (
                     <button
                       disabled={actionLoading !== null}
                       onClick={() => handleOpenSuspend(lic.id)}
@@ -640,7 +841,7 @@ export const LicenseScreen: React.FC = () => {
                     </button>
                   )}
                   
-                  {lic.associated_device && (
+                  {lic.associated_device && lic.associated_device !== 'UNBOUND' && (
                     <button
                       disabled={actionLoading !== null}
                       onClick={() => handleResetDevice(lic.id)}
@@ -665,30 +866,30 @@ export const LicenseScreen: React.FC = () => {
         )}
       </div>
 
-      {/* 3. Generate Lifetime License & Customer Registration Overlay Modal */}
+      {/* 3. Generate License & Customer Registration Overlay Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
-          <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.1)] p-6 max-w-sm w-full rounded-[20px] space-y-6">
-            <div className="border-b border-gray-100 pb-3 flex justify-between items-center">
-              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider">Generate Lifetime License</h4>
+          <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.1)] p-6 max-w-sm w-full rounded-[20px] space-y-4">
+            <div className="border-b border-gray-100 pb-2 flex justify-between items-center">
+              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider">Generate License</h4>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleGenerateLicense} className="space-y-4 text-xs">
-              <div className="space-y-2">
-                <label className="block text-[#64748B] uppercase font-bold tracking-widest text-[9px] font-semibold">
+            <form onSubmit={handleGenerateLicense} className="space-y-3.5 text-xs">
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-widest text-[9px]">
                   Generate Option
                 </label>
                 <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
                   <button
                     type="button"
                     onClick={() => setGenerationMode('EARLY_ACCESS')}
-                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 ${
+                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 border-none ${
                       generationMode === 'EARLY_ACCESS'
-                        ? 'bg-white text-[#0EA5E9] shadow-sm border-none'
-                        : 'text-[#64748B] hover:text-[#1E293B] border-none bg-transparent'
+                        ? 'bg-white text-[#0EA5E9] shadow-sm'
+                        : 'text-[#64748B] hover:text-[#1E293B] bg-transparent'
                     }`}
                   >
                     Early Access
@@ -696,10 +897,10 @@ export const LicenseScreen: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setGenerationMode('RELEASE')}
-                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 ${
+                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 border-none ${
                       generationMode === 'RELEASE'
-                        ? 'bg-white text-[#0EA5E9] shadow-sm border-none'
-                        : 'text-[#64748B] hover:text-[#1E293B] border-none bg-transparent'
+                        ? 'bg-white text-[#0EA5E9] shadow-sm'
+                        : 'text-[#64748B] hover:text-[#1E293B] bg-transparent'
                     }`}
                   >
                     Release
@@ -707,19 +908,19 @@ export const LicenseScreen: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setGenerationMode('RE_GENERATE')}
-                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 ${
+                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 border-none ${
                       generationMode === 'RE_GENERATE'
-                        ? 'bg-white text-[#0EA5E9] shadow-sm border-none'
-                        : 'text-[#64748B] hover:text-[#1E293B] border-none bg-transparent'
+                        ? 'bg-white text-[#0EA5E9] shadow-sm'
+                        : 'text-[#64748B] hover:text-[#1E293B] bg-transparent'
                     }`}
                   >
-                    Re-Generate
+                    Re-Gen
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-wider">
                   Full Name
                 </label>
                 <input
@@ -732,8 +933,8 @@ export const LicenseScreen: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-wider">
                   Email Address
                 </label>
                 <input
@@ -746,8 +947,8 @@ export const LicenseScreen: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-wider">
                   WhatsApp Number
                 </label>
                 <input
@@ -760,32 +961,68 @@ export const LicenseScreen: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-wider">
                   Ecommerce Name
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Shopee, Tokopedia, Lazada"
+                  placeholder="e.g. Shopee, Tokopedia"
                   value={customerEcommerce}
                   onChange={(e) => setCustomerEcommerce(e.target.value)}
                   className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-medium"
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-wider">
+                  License Duration
+                </label>
+                <select
+                  value={selectedLicenseType}
+                  onChange={(e) => setSelectedLicenseType(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer"
+                >
+                  <option value="LIFETIME">Lifetime</option>
+                  <option value="TRIAL">Trial (7 Days)</option>
+                  <option value="30_DAYS">30 Days</option>
+                  <option value="90_DAYS">90 Days (3 Months)</option>
+                  <option value="180_DAYS">180 Days (6 Months)</option>
+                  <option value="365_DAYS">365 Days (1 Year)</option>
+                  <option value="CUSTOM">Custom Duration</option>
+                </select>
+              </div>
+
+              {selectedLicenseType === 'CUSTOM' && (
+                <div className="space-y-1.5">
+                  <label className="block text-[#64748B] uppercase font-bold tracking-wider">
+                    Custom Duration (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    placeholder="e.g. 45"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-medium"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 font-bold uppercase"
+                  className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 font-bold uppercase border-none"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/90 text-white px-5 py-2 rounded-lg transition-all duration-300 font-bold uppercase shadow-sm flex items-center space-x-1"
+                  className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/90 text-white px-5 py-2 rounded-lg transition-all duration-300 font-bold uppercase shadow-sm flex items-center space-x-1 border-none"
                 >
                   {formLoading ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -803,11 +1040,11 @@ export const LicenseScreen: React.FC = () => {
       {isDetailModalOpen && (
         <div 
           onClick={() => setIsDetailModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent cursor-pointer animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm cursor-pointer"
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bg-white/95 backdrop-blur-md border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.15)] p-6 rounded-[24px] cursor-default space-y-6"
+            className="w-full max-w-sm bg-white/95 backdrop-blur-md border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.15)] p-6 rounded-[24px] cursor-default space-y-6 animate-scale-up"
           >
             <div className="border-b border-gray-100 pb-3 flex justify-between items-center">
               <div className="flex items-center space-x-2 text-[#0EA5E9]">
@@ -822,43 +1059,176 @@ export const LicenseScreen: React.FC = () => {
               </button>
             </div>
 
-            {selectedCustomer ? (
+            {selectedLicense ? (
               <div className="space-y-4">
                 <div className="bg-slate-50 border border-gray-150 p-4 rounded-xl space-y-3">
                   <div>
                     <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Owner Name</label>
-                    <span className="text-xs font-black text-[#1E293B]">{selectedCustomer.name}</span>
+                    <span className="text-xs font-black text-[#1E293B]">{selectedLicense.customers?.name || '-'}</span>
                   </div>
                   <div>
                     <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Email Address</label>
-                    <span className="text-xs font-mono text-[#64748B]">{selectedCustomer.email}</span>
+                    <span className="text-xs font-mono text-[#64748B]">{selectedLicense.customers?.email || '-'}</span>
                   </div>
                   <div>
                     <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">WhatsApp contact</label>
-                    <span className="text-xs font-mono text-[#64748B]">{selectedCustomer.whatsapp}</span>
+                    <span className="text-xs font-mono text-[#64748B]">{selectedLicense.customers?.whatsapp || '-'}</span>
                   </div>
-                  {selectedCustomer.phone && (
+                  {selectedLicense.customers?.phone && (
                     <div>
                       <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Ecommerce</label>
-                      <span className="text-xs font-mono text-[#64748B]">{selectedCustomer.phone}</span>
+                      <span className="text-xs font-mono text-[#64748B]">{selectedLicense.customers.phone}</span>
                     </div>
                   )}
+                  
+                  <div className="border-t border-gray-200/60 pt-3 mt-3 space-y-2">
+                    <div>
+                      <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">License Key</label>
+                      <span className="text-xs font-mono font-bold text-[#0EA5E9] select-all block break-all">{selectedLicense.license_key}</span>
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">License Type</label>
+                      <span className="text-xs font-bold text-[#1E293B] block uppercase">{selectedLicense.license_type || selectedLicense.type}</span>
+                    </div>
+                    {selectedLicense.duration_days && (
+                      <div>
+                        <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Duration Days</label>
+                        <span className="text-xs font-bold text-[#1E293B] block">{selectedLicense.duration_days} Days</span>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Expires At</label>
+                      <span className="text-xs font-bold text-[#1E293B] block">{getExpirationText(selectedLicense)}</span>
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Remaining Days</label>
+                      <span className={`text-xs font-bold block ${getRemainingDaysText(selectedLicense) === 'Expired' ? 'text-red-500' : 'text-[#1E293B]'}`}>{getRemainingDaysText(selectedLicense)}</span>
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Status</label>
+                      <span className="text-xs font-bold text-[#1E293B] uppercase block">{selectedLicense.status}</span>
+                    </div>
+                    {selectedLicense.activated_at && (
+                      <div>
+                        <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Activated At</label>
+                        <span className="text-xs text-[#64748B] block">{new Date(selectedLicense.activated_at).toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    {selectedLicense.renewed_at && (
+                      <div>
+                        <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Last Renewed At</label>
+                        <span className="text-xs text-[#64748B] block">{new Date(selectedLicense.renewed_at).toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                    {selectedLicense.last_validation && (
+                      <div>
+                        <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Last Validated At</label>
+                        <span className="text-xs text-[#64748B] block">{new Date(selectedLicense.last_validation).toLocaleString('id-ID')}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
               <div className="py-8 text-center text-xs font-bold text-slate-500 uppercase tracking-wide">
-                No Customer Registered to this Key // Unassigned
+                No License details loaded.
               </div>
             )}
 
             <div className="pt-2 border-t border-gray-100 flex justify-end">
               <button
                 onClick={() => setIsDetailModalOpen(false)}
-                className="w-full bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md uppercase tracking-wide"
+                className="w-full bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md uppercase tracking-wide border-none"
               >
                 Close View
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4b. Renew License Overlay Modal */}
+      {showRenewModal && renewingLicense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-sm cursor-pointer">
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.1)] p-6 max-w-sm w-full rounded-[20px] space-y-6 cursor-default animate-scale-up"
+          >
+            <div className="border-b border-gray-100 pb-3 flex justify-between items-center">
+              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider">Renew License</h4>
+              <button 
+                onClick={() => { setShowRenewModal(false); setRenewingLicense(null); }} 
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRenewLicense} className="space-y-4 text-xs">
+              <div className="space-y-1.5 bg-slate-50 p-3.5 rounded-xl border border-gray-150">
+                <span className="text-[8px] text-[#64748B] uppercase font-bold tracking-widest block">License Key</span>
+                <span className="font-mono font-bold text-xs text-[#0EA5E9] block select-all">{renewingLicense.license_key}</span>
+                <span className="text-[8px] text-[#64748B] uppercase font-bold tracking-widest block mt-2">Current Expiry</span>
+                <span className="font-bold text-xs text-[#1E293B] block">{getExpirationText(renewingLicense)} ({getRemainingDaysText(renewingLicense)})</span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
+                  Add Duration / Convert Type
+                </label>
+                <select
+                  value={renewType}
+                  onChange={(e) => setRenewType(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer"
+                >
+                  <option value="LIFETIME">Convert to Lifetime</option>
+                  <option value="TRIAL">Add Trial (7 Days)</option>
+                  <option value="30_DAYS">Add 30 Days</option>
+                  <option value="90_DAYS">Add 90 Days (3 Months)</option>
+                  <option value="180_DAYS">Add 180 Days (6 Months)</option>
+                  <option value="365_DAYS">Add 365 Days (1 Year)</option>
+                  <option value="CUSTOM">Add Custom Days</option>
+                </select>
+              </div>
+
+              {renewType === 'CUSTOM' && (
+                <div className="space-y-2">
+                  <label className="block text-[#64748B] uppercase font-bold tracking-wider font-semibold">
+                    Additional Days
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    placeholder="e.g. 30"
+                    value={renewCustomDays}
+                    onChange={(e) => setRenewCustomDays(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-medium"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowRenewModal(false); setRenewingLicense(null); }}
+                  className="bg-white hover:bg-gray-100 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg transition-all duration-300 font-bold uppercase border-none"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={renewFormLoading}
+                  className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/90 text-white px-5 py-2 rounded-lg transition-all duration-300 font-bold uppercase shadow-sm flex items-center space-x-1 border-none"
+                >
+                  {renewFormLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>Renew License</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

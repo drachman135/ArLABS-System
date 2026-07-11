@@ -42,10 +42,10 @@ BEGIN
   )
   ON CONFLICT (secure_device_id) DO UPDATE SET
     license_id = p_license_id,
-    model = COALESCE(EXCLUDED.model, model),
-    os_version = COALESCE(EXCLUDED.os_version, os_version),
-    android_version = COALESCE(EXCLUDED.android_version, android_version),
-    app_version = COALESCE(EXCLUDED.app_version, app_version),
+    model = COALESCE(EXCLUDED.model, devices.model),
+    os_version = COALESCE(EXCLUDED.os_version, devices.os_version),
+    android_version = COALESCE(EXCLUDED.android_version, devices.android_version),
+    app_version = COALESCE(EXCLUDED.app_version, devices.app_version),
     last_online = NOW();
 
   -- Update the license record
@@ -59,7 +59,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 4. Helper RPC to reset/update license status for testing (Security Definer to bypass RLS)
 CREATE OR REPLACE FUNCTION public.test_reset_license(p_key TEXT, p_status TEXT DEFAULT 'PENDING')
 RETURNS VOID AS $$
 BEGIN
@@ -67,6 +66,7 @@ BEGIN
   SET status = p_status, 
       associated_device = CASE WHEN p_status = 'PENDING' THEN 'UNBOUND' ELSE associated_device END, 
       activated_at = CASE WHEN p_status = 'PENDING' THEN NULL ELSE activated_at END, 
+      expires_at = CASE WHEN p_status = 'PENDING' THEN NULL ELSE expires_at END, 
       updated_at = NOW()
   WHERE license_key = p_key;
   

@@ -8,7 +8,7 @@ const corsHeaders = {
 
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] Incoming Request: ${req.method} ${req.url}`);
+  console.log(`[${timestamp}] Incoming Request to validate-license: ${req.method} ${req.url}`);
 
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Initialize Supabase Client with Service Role Key to bypass RLS for administrative activation tasks
+  // Initialize Supabase Client with Service Role Key to bypass RLS
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
@@ -45,7 +45,6 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // 1. Parse and Validate Request Payload
     let body;
     try {
       body = await req.json();
@@ -64,7 +63,7 @@ Deno.serve(async (req) => {
     console.log(`[${timestamp}] Payload:`, JSON.stringify(body));
 
     const rawLicenseKey = body.license_key;
-    const rawSecureDeviceId = body.secure_device_id || body.device_id; // Support both just in case
+    const rawSecureDeviceId = body.secure_device_id || body.device_id;
 
     if (!rawLicenseKey || typeof rawLicenseKey !== 'string') {
       return new Response(
@@ -77,19 +76,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!rawSecureDeviceId || typeof rawSecureDeviceId !== 'string') {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'MISSING_DEVICE_ID',
-          message: 'secure_device_id (or device_id) is required and must be a string.',
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const licenseKey = rawLicenseKey.trim().toUpperCase();
-    const secureDeviceId = rawSecureDeviceId.trim();
+    const secureDeviceId = rawSecureDeviceId ? rawSecureDeviceId.trim() : null;
 
     if (!licenseKey) {
       return new Response(
@@ -102,65 +90,34 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!secureDeviceId) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'INVALID_DEVICE_ID_FORMAT',
-          message: 'secure_device_id cannot be empty or whitespaces.',
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 2. Database Schema Validation
-    console.log(`[${timestamp}] Validating database schema integrity...`);
-    const { error: deviceSchemaCheckError } = await supabase
-      .from('devices')
-      .select('secure_device_id')
-      .limit(0);
-
-    if (deviceSchemaCheckError) {
-      console.error(`[${timestamp}] Schema check failed on devices:`, deviceSchemaCheckError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'DATABASE_SCHEMA_ERROR',
-          message: 'Backend schema mismatch. Table "devices" does not contain expected "secure_device_id" column.',
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { error: licenseSchemaCheckError } = await supabase
+    // 1. Schema check
+    const { error: schemaError } = await supabase
       .from('licenses')
-      .select('id, license_key, status, associated_device, expiration_date, expired_at, expires_at, duration_days')
+      .select('id, license_key, status, associated_device, expiration_date, expired_at, expires_at, duration_days, last_validation')
       .limit(0);
 
-    if (licenseSchemaCheckError) {
-      console.error(`[${timestamp}] Schema check failed on licenses:`, licenseSchemaCheckError);
+    if (schemaError) {
+      console.error(`[${timestamp}] Schema validation failed on licenses table:`, schemaError);
       return new Response(
         JSON.stringify({
           success: false,
           code: 'DATABASE_SCHEMA_ERROR',
-          message: 'Backend schema mismatch in "licenses" table.',
+          message: 'Licenses table missing duration columns. Verify migrations have been run.',
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[${timestamp}] Schema validation successful.`);
-
-    // 3. Retrieve License Record
-    console.log(`[${timestamp}] Searching for license key: ${licenseKey}`);
-    const { data: license, error: licenseFetchError } = await supabase
+    // 2. Query License
+    console.log(`[${timestamp}] Querying license: ${licenseKey}`);
+    const { data: license, error: fetchError } = await supabase
       .from('licenses')
       .select('*')
       .eq('license_key', licenseKey)
       .maybeSingle();
 
-    if (licenseFetchError) {
-      console.error(`[${timestamp}] Database error while fetching license:`, licenseFetchError);
+    if (fetchError) {
+      console.error(`[${timestamp}] Database fetch error:`, fetchError);
       return new Response(
         JSON.stringify({
           success: false,
@@ -172,7 +129,7 @@ Deno.serve(async (req) => {
     }
 
     if (!license) {
-      console.log(`[${timestamp}] License key not found: ${licenseKey}`);
+      console.log(`[${timestamp}] License not found: ${licenseKey}`);
       return new Response(
         JSON.stringify({
           success: false,
@@ -183,9 +140,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[${timestamp}] License found. Status: ${license.status}, Associated Device: ${license.associated_device}`);
-
-    // 4. Validate Expiration
+    // 3. Expiration Check
     const now = new Date();
     const isExpired = (license.expires_at && new Date(license.expires_at) < now) ||
                       (license.expiration_date && new Date(license.expiration_date) < now) ||
@@ -194,7 +149,6 @@ Deno.serve(async (req) => {
     if (isExpired || license.status === 'EXPIRED') {
       console.log(`[${timestamp}] License has expired.`);
       if (license.status !== 'EXPIRED') {
-        // Automatically sync database status
         await supabase
           .from('licenses')
           .update({ status: 'EXPIRED', updated_at: timestamp })
@@ -210,7 +164,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Validate Status
+    // 4. Status Check
     if (license.status === 'SUSPENDED') {
       console.log(`[${timestamp}] License is suspended.`);
       return new Response(
@@ -236,21 +190,21 @@ Deno.serve(async (req) => {
     }
 
     if (license.status !== 'PENDING' && license.status !== 'ACTIVE') {
-      console.log(`[${timestamp}] Invalid license status: ${license.status}`);
+      console.log(`[${timestamp}] Invalid status: ${license.status}`);
       return new Response(
         JSON.stringify({
           success: false,
           code: 'INVALID_LICENSE_STATUS',
-          message: `License status does not allow activation (Status: ${license.status}).`,
+          message: `License status does not allow validation (Status: ${license.status}).`,
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 6. Validate Device Binding (Idempotency vs Conflict)
-    if (license.associated_device && license.associated_device !== 'UNBOUND') {
+    // 5. Device check
+    if (secureDeviceId && license.associated_device && license.associated_device !== 'UNBOUND') {
       if (license.associated_device !== secureDeviceId) {
-        console.log(`[${timestamp}] Device conflict. License is bound to device: ${license.associated_device}, requested device: ${secureDeviceId}`);
+        console.log(`[${timestamp}] Device conflict. License is bound to ${license.associated_device}, request sent by ${secureDeviceId}`);
         return new Response(
           JSON.stringify({
             success: false,
@@ -259,55 +213,40 @@ Deno.serve(async (req) => {
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-      } else {
-        console.log(`[${timestamp}] Idempotent activation request. Device is already bound.`);
-        return new Response(
-          JSON.stringify({
-            success: true,
-            message: 'License is already active on this device.',
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
       }
     }
 
-    // 7. Execute Atomic Activation Transaction via PostgreSQL RPC Function
-    console.log(`[${timestamp}] Triggering atomic activation database transaction for license_id: ${license.id}`);
-    
-    const { error: txError } = await supabase.rpc('activate_license_db_tx', {
-      p_license_id: license.id,
-      p_secure_device_id: secureDeviceId,
-      p_model: body.model || null,
-      p_os_version: body.os_version || null,
-      p_android_version: body.android_version || null,
-      p_app_version: body.app_version || null,
-    });
+    // 6. Update last_validation timestamp
+    await supabase
+      .from('licenses')
+      .update({ last_validation: timestamp })
+      .eq('id', license.id);
 
-    if (txError) {
-      console.error(`[${timestamp}] Transaction failed. Rolling back implicitly:`, txError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'DATABASE_TRANSACTION_FAILED',
-          message: 'An error occurred during database transaction. Process was rolled back.',
-          details: txError.message,
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Calculate days remaining
+    let daysRemaining = null;
+    if (license.expires_at) {
+      const diffMs = new Date(license.expires_at).getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
     }
 
-    console.log(`[${timestamp}] Transaction committed successfully. License activated on device: ${secureDeviceId}`);
+    console.log(`[${timestamp}] License validation successful.`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'License activated successfully.',
+        message: 'License is active.',
+        license_type: license.license_type || license.type || 'LIFETIME',
+        duration_days: license.duration_days,
+        activated_at: license.activated_at,
+        expires_at: license.expires_at,
+        days_remaining: daysRemaining,
+        expired: false
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (err: any) {
-    console.error(`[${timestamp}] Unhandled error caught:`, err);
+    console.error(`[${timestamp}] Unhandled validation error:`, err);
     return new Response(
       JSON.stringify({
         success: false,
