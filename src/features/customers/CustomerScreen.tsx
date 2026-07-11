@@ -129,10 +129,12 @@ export const CustomerScreen: React.FC = () => {
         .from('licenses')
         .insert([{
           license_key: generatedKeyVal,
+          license_type: 'LIFETIME',
           type: 'LIFETIME',
-          status: 'ACTIVE',
+          status: 'PENDING',
           customer_id: newCustomer.id,
-          associated_device: 'UNBOUND'
+          associated_device: 'UNBOUND',
+          created_at: new Date().toISOString()
         }]);
 
       if (licenseError) {
