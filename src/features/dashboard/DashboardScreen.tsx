@@ -11,14 +11,25 @@ import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
 import { ApkStatsDashboard } from '../apkstats/ApkStatsDashboard';
 import { CrashReportScreen } from '../crash/CrashReportScreen';
 import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
-import {   RefreshCw, 
+import {
+  RefreshCw,
   Wifi,
   Database,
   X,
   Key,
   AlertTriangle,
   Bell,
-  Menu
+  Menu,
+  LayoutDashboard,
+  Box,
+  Radio,
+  Terminal,
+  Plus,
+  UploadCloud,
+  MessageSquare,
+  LogOut,
+  ChevronUp,
+  Smartphone
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -48,7 +59,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.dropdown-container')) {
+      if (!target.closest('.dock-container')) {
         setOpenDropdown(null);
       }
     };
@@ -60,14 +71,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     setOpenDropdown(prev => prev === name ? null : name);
   };
 
-  // Metrics states initialized to zero
   const [metrics, setMetrics] = useState({
     activeDevices: 0,
     activeLicenses: 0,
     expiredLicenses: 0
   });
 
-  // Activation history points (7 days)
   const activationHistory = [
     { day: 'MON', count: 12 },
     { day: 'TUE', count: 19 },
@@ -78,7 +87,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     { day: 'SUN', count: 30 }
   ];
 
-  // System time updater
   useEffect(() => {
     const updateTime = () => {
       const date = new Date();
@@ -89,24 +97,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     return () => clearInterval(interval);
   }, []);
 
-  // Dynamic OneSignal SDK Initialization
   useEffect(() => {
     const onesignalAppId = (import.meta as any).env?.VITE_ONESIGNAL_APP_ID;
-    if (!onesignalAppId) {
-      console.warn("OneSignal VITE_ONESIGNAL_APP_ID is not configured in environment variables.");
-      return;
-    }
+    if (!onesignalAppId) return;
 
     const initOneSignal = async () => {
-      // Check if running on Capacitor (as a native app) and the plugin is loaded
       if ((window as any).Capacitor && (window as any).plugins?.OneSignal) {
         try {
           const OneSignal = (window as any).plugins.OneSignal;
-          
-          // Initialize OneSignal
           OneSignal.initialize(onesignalAppId);
-          
-          // Request notification permissions
           OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
             console.log("OneSignal push notification permission response:", success);
           });
@@ -115,11 +114,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         }
       }
     };
-
     initOneSignal();
   }, []);
 
-  // Toast notifications state
   interface ToastNotification {
     id: string;
     title: string;
@@ -128,24 +125,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   }
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
-  // Audio synthesis helper for real-time cues
   const playNotificationSound = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
-      
+
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
-      
+
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
       gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      
+
       oscillator.start(audioCtx.currentTime);
       oscillator.stop(audioCtx.currentTime + 0.3);
-      
+
       const oscillator2 = audioCtx.createOscillator();
       const gainNode2 = audioCtx.createGain();
       oscillator2.connect(gainNode2);
@@ -169,16 +165,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     } else if (title.includes('⚠️') || title.toLowerCase().includes('lap') || title.toLowerCase().includes('feed')) {
       type = 'feedback';
     }
-    
+
     setToasts(prev => [...prev, { id, title, body, type }]);
     playNotificationSound();
-    
+
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 6000);
   };
 
-  // Real-time listener for client-driven events logged to notifications table
   useEffect(() => {
     const channel = supabase
       .channel('global:notifications')
@@ -186,796 +181,434 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         const newNotif = payload.new as any;
         if (newNotif && newNotif.title) {
           addToast(newNotif.title, newNotif.body || newNotif.message || '');
-          // Automatically refresh stats and log stream
           fetchDashboardData();
         }
       })
-      .subscribe((status) => {
-        console.log("Supabase Realtime 'notifications' subscription status:", status);
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Fetch metrics & check Supabase connectivity
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
       const start = performance.now();
-
-      // Test Supabase connection
       const { error: pingError } = await supabase.from('admins').select('id').limit(1);
       const end = performance.now();
-
       if (pingError) throw pingError;
       setConnected(true);
 
-      // Query active licenses count from live table
-      const { count: activeLicCount, error: activeLicErr } = await supabase
-        .from('licenses')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'ACTIVE');
+      const { count: activeLicCount, error: activeLicErr } = await supabase.from('licenses').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE');
+      const { count: activeDevCount, error: activeDevErr } = await supabase.from('devices').select('*', { count: 'exact', head: true });
+      const { count: expiredLicCount, error: expiredLicErr } = await supabase.from('licenses').select('*', { count: 'exact', head: true }).in('status', ['EXPIRED', 'SUSPENDED']);
 
-      // Query active devices count from live table
-      const { count: activeDevCount, error: activeDevErr } = await supabase
-        .from('devices')
-        .select('*', { count: 'exact', head: true });
-
-      // Query expired licenses count from live table
-      const { count: expiredLicCount, error: expiredLicErr } = await supabase
-        .from('licenses')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['EXPIRED', 'SUSPENDED']);
-
-      // Check errors and set state
       if (activeLicErr || activeDevErr || expiredLicErr) {
-        console.error('Metadata queries returned database errors. Clearing telemetry state.');
-        setMetrics({
-          activeDevices: 0,
-          activeLicenses: 0,
-          expiredLicenses: 0
-        });
+        setMetrics({ activeDevices: 0, activeLicenses: 0, expiredLicenses: 0 });
       } else {
-        setMetrics({
-          activeDevices: activeDevCount || 0,
-          activeLicenses: activeLicCount || 0,
-          expiredLicenses: expiredLicCount || 0
-        });
+        setMetrics({ activeDevices: activeDevCount || 0, activeLicenses: activeLicCount || 0, expiredLicenses: expiredLicCount || 0 });
       }
 
-      // Attempt to load audit logs from Supabase public.logs table
-      const { data: logData, error: logError } = await supabase
-        .from('logs')
-        .select('id, action, description, severity, created_at')
-        .order('created_at', { ascending: false })
-        .limit(6);
-
+      const { data: logData, error: logError } = await supabase.from('logs').select('id, action, description, severity, created_at').order('created_at', { ascending: false }).limit(6);
       if (!logError && logData && logData.length > 0) {
         setLogs(logData.map(l => ({
-          id: l.id,
-          action: l.action,
-          description: l.description,
-          severity: l.severity as 'info' | 'warning' | 'critical',
+          id: l.id, action: l.action, description: l.description, severity: l.severity as 'info' | 'warning' | 'critical',
           created_at: new Date(l.created_at).toLocaleTimeString('en-US', { hour12: false })
         })));
       } else {
         setLogs([
-          { id: '1', action: 'SYS_CONN_PING', description: `Supabase database ping completed in ${Math.round(end - start)}ms`, severity: 'info', created_at: new Date().toLocaleTimeString('en-US', { hour12: false }) },
-          { id: '2', action: 'AUTH_VALIDATE', description: `Authenticated session verified for ${profile?.name || 'Administrator'} (${profile?.role})`, severity: 'info', created_at: new Date(Date.now() - 3000).toLocaleTimeString('en-US', { hour12: false }) },
-          { id: '3', action: 'SECURITY_RLS', description: 'Multi-tenant RLS check verified. Context isolated.', severity: 'info', created_at: new Date(Date.now() - 10000).toLocaleTimeString('en-US', { hour12: false }) }
+          { id: '1', action: 'SYS_CONN_PING', description: `Database ping OK in ${Math.round(end - start)}ms`, severity: 'info', created_at: new Date().toLocaleTimeString('en-US', { hour12: false }) },
+          { id: '2', action: 'AUTH_VALIDATE', description: `Session OK: ${profile?.name || 'Administrator'}`, severity: 'info', created_at: new Date(Date.now() - 3000).toLocaleTimeString('en-US', { hour12: false }) },
+          { id: '3', action: 'SECURITY_RLS', description: 'Multi-tenant RLS check verified.', severity: 'info', created_at: new Date(Date.now() - 10000).toLocaleTimeString('en-US', { hour12: false }) }
         ]);
       }
-
     } catch (err: any) {
-      console.error('Supabase integration failed: ', err);
       setConnected(false);
-      setLogs([
-        {
-          id: 'err-1',
-          action: 'CONN_FAIL',
-          description: err?.message || 'Gagal memuat telemetri. Periksa sinkronisasi tabel database.',
-          severity: 'critical',
-          created_at: new Date().toLocaleTimeString('en-US', { hour12: false })
-        }
-      ]);
-      setMetrics({
-        activeDevices: 0,
-        activeLicenses: 0,
-        expiredLicenses: 0
-      });
+      setLogs([{ id: 'err-1', action: 'CONN_FAIL', description: err?.message || 'Gagal memuat telemetri.', severity: 'critical', created_at: new Date().toLocaleTimeString('en-US', { hour12: false }) }]);
+      setMetrics({ activeDevices: 0, activeLicenses: 0, expiredLicenses: 0 });
     } finally {
       setLoading(false);
     }
   };
 
-  // Re-fetch metrics whenever tab view switches back to Overview or profile changes
   useEffect(() => {
     fetchDashboardData();
   }, [profile, activeView]);
 
   useEffect(() => {
-    const handleDbRefresh = () => {
-      fetchDashboardData();
-    };
+    const handleDbRefresh = () => fetchDashboardData();
     window.addEventListener('db-refresh', handleDbRefresh);
     return () => window.removeEventListener('db-refresh', handleDbRefresh);
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] text-[#1E293B] font-['Outfit'] select-none p-4 sm:p-6 md:p-8 overflow-x-hidden relative">
+    <div className="min-h-screen bg-[#090D16] text-slate-300 font-['Outfit'] select-none pb-28 lg:pb-8 lg:pl-[104px] overflow-x-hidden relative">
 
-      {/* 1a. TOP MENU BAR - DESKTOP ONLY */}
-      <header className="hidden lg:flex max-w-7xl mx-auto bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-6 rounded-[24px] justify-between items-center mb-12 gap-4">
-        <div className="flex flex-wrap items-center gap-6">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-[8px] bg-gradient-to-tr from-[#0EA5E9] to-[#38bdf8] flex items-center justify-center font-bold text-white text-sm shadow-[0_2px_10px_rgba(14,165,233,0.3)]">
-              Ar
-            </div>
-            <span className="text-[#1E293B] font-black tracking-tight text-sm">Pusat Kontrol ArLABS</span>
-          </div>
-
-          {/* Tab Navigation Buttons */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {/* 1. Panel Ringkasan (Overview) */}
-            <button
-              onClick={() => { setActiveView('dashboard'); setOpenDropdown(null); }}
-              className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 ${activeView === 'dashboard'
-                  ? 'bg-[#0EA5E9] text-white shadow-[2px_2px_5px_rgba(14,165,233,0.3)]'
-                  : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
-                }`}
-            >
-              Panel Ringkasan
-            </button>
-
-            {/* 2. Analisis & Statistik Dropdown */}
-            <div className="dropdown-container relative">
-              <button
-                onClick={() => toggleDropdown('stats')}
-                className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 flex items-center space-x-1 ${['analytics', 'apkstats'].includes(activeView)
-                    ? 'bg-gradient-to-r from-[#6366F1] to-[#0EA5E9] text-white shadow-[2px_2px_8px_rgba(99,102,241,0.35)]'
-                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
-                  }`}
-              >
-                <span>Analisis & Statistik</span>
-                <span className="text-[10px] pl-1 opacity-70">▼</span>
-              </button>
-              {openDropdown === 'stats' && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1 flex flex-col space-y-1">
-                  <button
-                    onClick={() => { setActiveView('analytics'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'analytics' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Analisis Sistem ✦
-                  </button>
-                  <button
-                    onClick={() => { setActiveView('apkstats'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'apkstats' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Statistik APK ↓
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Laporan Telemetri Dropdown */}
-            <div className="dropdown-container relative">
-              <button
-                onClick={() => toggleDropdown('reports')}
-                className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 flex items-center space-x-1 ${['crash', 'feedback'].includes(activeView)
-                    ? 'bg-gradient-to-r from-[#EF4444] to-[#F43F5E] text-white shadow-[2px_2px_8px_rgba(239,68,68,0.35)]'
-                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
-                  }`}
-              >
-                <span>Laporan Telemetri</span>
-                <span className="text-[10px] pl-1 opacity-70">▼</span>
-              </button>
-              {openDropdown === 'reports' && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1 flex flex-col space-y-1">
-                  <button
-                    onClick={() => { setActiveView('crash'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'crash' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Laporan Crash ⚠️
-                  </button>
-                  <button
-                    onClick={() => { setActiveView('feedback'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'feedback' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Pusat Masukan 💬
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 4. Registri Kemitraan Dropdown */}
-            <div className="dropdown-container relative">
-              <button
-                onClick={() => toggleDropdown('registry')}
-                className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 flex items-center space-x-1 ${['licenses', 'customers'].includes(activeView)
-                    ? 'bg-[#0EA5E9] text-white shadow-[2px_2px_5px_rgba(14,165,233,0.3)]'
-                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
-                  }`}
-              >
-                <span>Registri Kemitraan</span>
-                <span className="text-[10px] pl-1 opacity-70">▼</span>
-              </button>
-              {openDropdown === 'registry' && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1 flex flex-col space-y-1">
-                  <button
-                    onClick={() => { setActiveView('licenses'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'licenses' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Registri Lisensi 🔑
-                  </button>
-                  <button
-                    onClick={() => { setActiveView('customers'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'customers' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Registri Pelanggan 👥
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 5. Rilis & Distribusi Dropdown */}
-            <div className="dropdown-container relative">
-              <button
-                onClick={() => toggleDropdown('distribution')}
-                className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 flex items-center space-x-1 ${['applications', 'updates'].includes(activeView)
-                    ? 'bg-[#0EA5E9] text-white shadow-[2px_2px_5px_rgba(14,165,233,0.3)]'
-                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
-                  }`}
-              >
-                <span>Rilis & Distribusi</span>
-                <span className="text-[10px] pl-1 opacity-70">▼</span>
-              </button>
-              {openDropdown === 'distribution' && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1 flex flex-col space-y-1">
-                  <button
-                    onClick={() => { setActiveView('applications'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'applications' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Kontrol Aplikasi 📱
-                  </button>
-                  <button
-                    onClick={() => { setActiveView('updates'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'updates' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Pembaruan OTA 📦
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* 6. Siaran & Konfigurasi Dropdown */}
-            <div className="dropdown-container relative">
-              <button
-                onClick={() => toggleDropdown('broadcast')}
-                className={`px-4 py-2 rounded-lg font-bold transition-all duration-300 flex items-center space-x-1 ${['notifications', 'announcements', 'config'].includes(activeView)
-                    ? 'bg-[#0EA5E9] text-white shadow-[2px_2px_5px_rgba(14,165,233,0.3)]'
-                    : 'text-[#64748B] hover:text-[#1E293B] hover:bg-white/40'
-                  }`}
-              >
-                <span>Siaran & Konfigurasi</span>
-                <span className="text-[10px] pl-1 opacity-70">▼</span>
-              </button>
-              {openDropdown === 'broadcast' && (
-                <div className="absolute left-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1 flex flex-col space-y-1">
-                  <button
-                    onClick={() => { setActiveView('notifications'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'notifications' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Siaran Push 🔔
-                  </button>
-                  <button
-                    onClick={() => { setActiveView('announcements'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'announcements' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Pengumuman In-App 📢
-                  </button>
-                  <button
-                    onClick={() => { setActiveView('config'); setOpenDropdown(null); }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold rounded-lg transition-colors ${activeView === 'config' ? 'bg-[#F0F2F5] text-[#1E293B]' : 'text-[#64748B] hover:bg-gray-50'}`}
-                  >
-                    Konfigurasi Jarak Jauh ⚙️
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-6 text-xs text-[#64748B]">
-          {/* Clock */}
-          <span className="font-mono">WAKTU_SISTEM // {currentTime || '00:00:00'}</span>
-
-          {/* Supabase Connectivity status */}
-          <div className="flex items-center space-x-2 bg-white/40 border border-white/60 px-3 py-1.5 rounded-lg shadow-sm">
-            <Wifi className="w-3.5 h-3.5 text-[#64748B]/60" />
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-[#0EA5E9] animate-pulse shadow-[0_0_8px_#0EA5E9]' : 'bg-red-400'}`} />
-            <span className={`font-semibold text-[10px] uppercase tracking-wider ${connected ? 'text-[#0EA5E9]' : 'text-red-400'}`}>
-              {connected ? 'TERHUBUNG' : 'LURING'}
-            </span>
-          </div>
-
-          {/* User profile */}
-          <span className="text-[#1E293B] font-semibold" title={session?.user?.id}>
-            {profile?.name || 'Admin'} ({profile?.role || 'owner'})
-          </span>
-
-          {/* Neumorphic Sign out button */}
-          <button
-            onClick={onLogout}
-            className="border border-[#64748B]/30 text-[#1E293B] hover:bg-red-500 hover:text-white hover:border-transparent px-4 py-1.5 rounded-lg transition-all duration-300 font-bold shadow-sm"
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
-
-      {/* 1b. TOP MENU BAR - MOBILE ONLY */}
-      <header className="flex lg:hidden justify-between items-center bg-white/80 backdrop-blur-md border border-white/60 shadow-md p-4 rounded-[20px] mb-6 gap-3 max-w-7xl mx-auto">
+      {/* --- HEADER --- */}
+      <header className="sticky top-0 z-40 bg-[#090D16]/80 backdrop-blur-xl border-b border-white/5 px-4 md:px-8 py-4 flex justify-between items-center mb-6">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-[8px] bg-gradient-to-tr from-[#0EA5E9] to-[#38bdf8] flex items-center justify-center font-bold text-white text-sm shadow-[0_2px_10px_rgba(14,165,233,0.3)]">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-500 flex items-center justify-center font-black text-white text-sm shadow-[0_0_15px_rgba(14,165,233,0.4)]">
             Ar
           </div>
-          <span className="text-[#1E293B] font-black tracking-tight text-xs">ArLABS</span>
+          <div className="hidden sm:block">
+            <h1 className="text-white font-black tracking-tight text-sm uppercase">ArLABS Command</h1>
+            <p className="text-[10px] text-sky-400 font-mono tracking-widest">SYS_TIME // {currentTime || '00:00:00'}</p>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          {/* Mini connectivity */}
-          <div className="flex items-center px-2 py-1 bg-white/40 border border-white/60 rounded-lg text-[9px] font-bold">
-            <span className={`w-1.5 h-1.5 rounded-full mr-1 ${connected ? 'bg-[#0EA5E9] animate-pulse' : 'bg-red-400'}`} />
-            <span className={connected ? 'text-[#0EA5E9]' : 'text-red-400'}>{connected ? 'ONLINE' : 'OFFLINE'}</span>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-sm">
+            <Wifi className={`w-3.5 h-3.5 ${connected ? 'text-emerald-400' : 'text-rose-500'}`} />
+            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse' : 'bg-rose-500'}`} />
+            <span className="hidden sm:inline font-bold text-[10px] uppercase tracking-widest text-slate-300">
+              {connected ? 'LINK OK' : 'OFFLINE'}
+            </span>
           </div>
 
           <button
             onClick={() => setIsMobileDrawerOpen(true)}
-            className="p-2 bg-white border border-gray-100 rounded-xl shadow-sm hover:bg-gray-50 text-[#1E293B]"
+            className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all"
           >
             <Menu className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* Mobile Drawer Slide-over Panel */}
-      {isMobileDrawerOpen && (
-        <div 
-          onClick={() => setIsMobileDrawerOpen(false)}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 lg:hidden transition-opacity duration-300"
+      {/* --- FLOATING DOCK NAVIGATION --- */}
+      <nav className="dock-container fixed bottom-6 left-6 right-6 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:left-6 lg:right-auto lg:w-[72px] lg:h-auto bg-[#131825]/90 backdrop-blur-2xl border border-white/10 rounded-3xl lg:rounded-[2rem] p-3 lg:py-6 flex flex-row lg:flex-col justify-around lg:justify-start lg:space-y-6 items-center z-50 shadow-2xl">
+        <button
+          onClick={() => { setActiveView('dashboard'); setOpenDropdown(null); }}
+          className={`p-3.5 rounded-2xl transition-all duration-300 group ${activeView === 'dashboard' ? 'bg-sky-500/20 text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.2)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
         >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="w-72 max-w-[85vw] h-full bg-white shadow-2xl p-6 flex flex-col justify-between overflow-y-auto transform transition-transform duration-300"
+          <LayoutDashboard className="w-5 h-5 group-hover:scale-110 transition-transform" />
+        </button>
+
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleDropdown('registry'); }}
+            className={`p-3.5 rounded-2xl transition-all duration-300 group ${['licenses', 'customers'].includes(activeView) || openDropdown === 'registry' ? 'bg-indigo-500/20 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
           >
-            <div className="space-y-6">
-              {/* Drawer Header */}
-              <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-[8px] bg-gradient-to-tr from-[#0EA5E9] to-[#38bdf8] flex items-center justify-center font-bold text-white text-sm shadow-[0_2px_10px_rgba(14,165,233,0.3)]">
-                    Ar
-                  </div>
-                  <span className="text-[#1E293B] font-black tracking-tight text-sm">ArLABS</span>
-                </div>
-                <button 
-                  onClick={() => setIsMobileDrawerOpen(false)}
-                  className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+            <Key className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          </button>
+        </div>
 
-              {/* User Profile Info Card */}
-              <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-2">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Operator Profile</p>
-                <h4 className="text-xs font-black text-[#1E293B] truncate">{profile?.name || 'Admin'}</h4>
-                <p className="text-[9px] font-mono text-gray-500 truncate">{profile?.email || 'admin@system.com'}</p>
-                <div className="flex items-center space-x-1.5 pt-1">
-                  <span className="text-[8px] font-bold uppercase bg-sky-50 text-[#0EA5E9] px-2 py-0.5 rounded border border-sky-100">
-                    {profile?.role || 'staff'}
-                  </span>
-                </div>
-              </div>
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleDropdown('distribution'); }}
+            className={`p-3.5 rounded-2xl transition-all duration-300 group ${['applications', 'updates'].includes(activeView) || openDropdown === 'distribution' ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+          >
+            <Box className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          </button>
+        </div>
 
-              {/* Navigation Items */}
-              <div className="space-y-4">
-                <p className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest pl-1">Navigasi Sistem</p>
-                <div className="flex flex-col space-y-1.5 text-xs">
-                  
-                  {/* Panel Ringkasan */}
-                  <button
-                    onClick={() => { setActiveView('dashboard'); setIsMobileDrawerOpen(false); }}
-                    className={`w-full text-left px-4 py-2.5 rounded-xl font-bold transition-all ${
-                      activeView === 'dashboard' ? 'bg-[#0EA5E9] text-white shadow-sm' : 'text-[#64748B] hover:bg-slate-50'
-                    }`}
-                  >
-                    Panel Ringkasan
-                  </button>
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleDropdown('broadcast'); }}
+            className={`p-3.5 rounded-2xl transition-all duration-300 group ${['notifications', 'announcements', 'config'].includes(activeView) || openDropdown === 'broadcast' ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+          >
+            <Radio className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          </button>
+        </div>
 
-                  {/* Analisis & Statistik */}
-                  <div className="pt-1.5">
-                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Analisis & Statistik</p>
-                    <button
-                      onClick={() => { setActiveView('analytics'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'analytics' ? 'bg-[#6366F1] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Analisis Sistem ✦
-                    </button>
-                    <button
-                      onClick={() => { setActiveView('apkstats'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'apkstats' ? 'bg-[#6366F1] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Statistik APK ↓
-                    </button>
-                  </div>
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleDropdown('reports'); }}
+            className={`p-3.5 rounded-2xl transition-all duration-300 group ${['analytics', 'apkstats', 'crash', 'feedback'].includes(activeView) || openDropdown === 'reports' ? 'bg-rose-500/20 text-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.2)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+          >
+            <Terminal className="w-5 h-5 group-hover:scale-110 transition-transform" />
+          </button>
+        </div>
+      </nav>
 
-                  {/* Laporan Telemetri */}
-                  <div className="pt-1.5">
-                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Laporan Telemetri</p>
-                    <button
-                      onClick={() => { setActiveView('crash'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'crash' ? 'bg-red-500 text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Laporan Crash ⚠️
-                    </button>
-                    <button
-                      onClick={() => { setActiveView('feedback'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'feedback' ? 'bg-red-500 text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Pusat Masukan 💬
-                    </button>
-                  </div>
-
-                  {/* Registri Kemitraan */}
-                  <div className="pt-1.5">
-                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Registri Kemitraan</p>
-                    <button
-                      onClick={() => { setActiveView('licenses'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'licenses' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Registri Lisensi 🔑
-                    </button>
-                    <button
-                      onClick={() => { setActiveView('customers'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'customers' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Registri Pelanggan 👥
-                    </button>
-                  </div>
-
-                  {/* Rilis & Distribusi */}
-                  <div className="pt-1.5">
-                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Rilis & Distribusi</p>
-                    <button
-                      onClick={() => { setActiveView('applications'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'applications' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Kontrol Aplikasi 📱
-                    </button>
-                    <button
-                      onClick={() => { setActiveView('updates'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'updates' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Pembaruan OTA 📦
-                    </button>
-                  </div>
-
-                  {/* Siaran & Konfigurasi */}
-                  <div className="pt-1.5">
-                    <p className="text-[9px] text-[#94a3b8] uppercase font-black tracking-wider pl-4 mb-1">Siaran & Konfigurasi</p>
-                    <button
-                      onClick={() => { setActiveView('notifications'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'notifications' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Siaran Push 🔔
-                    </button>
-                    <button
-                      onClick={() => { setActiveView('announcements'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'announcements' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Pengumuman In-App 📢
-                    </button>
-                    <button
-                      onClick={() => { setActiveView('config'); setIsMobileDrawerOpen(false); }}
-                      className={`w-full text-left px-4 py-2 rounded-xl font-bold transition-all ${
-                        activeView === 'config' ? 'bg-[#0EA5E9] text-white' : 'text-[#64748B] hover:bg-slate-50'
-                      }`}
-                    >
-                      Konfigurasi Jarak Jauh ⚙️
-                    </button>
-                  </div>
-                </div>
-              </div>
+      {/* --- DYNAMIC SHEETS FOR DOCK MENU --- */}
+      {openDropdown && (
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:pl-32 lg:flex lg:items-center" onClick={() => setOpenDropdown(null)}>
+          <div
+            className="absolute bottom-[100px] left-6 right-6 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:w-72 bg-[#1A2133] border border-white/10 p-4 rounded-3xl shadow-2xl animate-[slideUp_0.2s_ease-out]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4 px-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Pilih Modul</span>
+              <button onClick={() => setOpenDropdown(null)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
 
-            {/* Bottom Actions in Drawer */}
-            <div className="pt-4 border-t border-gray-100">
-              <button
-                onClick={() => { onLogout(); setIsMobileDrawerOpen(false); }}
-                className="w-full py-2.5 bg-red-50 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-200 transition-colors font-bold text-center text-xs"
-              >
-                Sign Out
-              </button>
-              <p className="text-center font-mono text-[8px] text-gray-400 mt-3 uppercase tracking-widest">
-                WAKTU: {currentTime || '00:00:00'}
-              </p>
+            <div className="space-y-2">
+              {openDropdown === 'registry' && (
+                <>
+                  <button onClick={() => { setActiveView('licenses'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-indigo-500/20 text-white rounded-2xl transition-all text-sm font-bold"><Key className="w-4 h-4 text-indigo-400 mr-3" /> Registri Lisensi</button>
+                  <button onClick={() => { setActiveView('customers'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-indigo-500/20 text-white rounded-2xl transition-all text-sm font-bold"><Menu className="w-4 h-4 text-indigo-400 mr-3" /> Registri Pelanggan</button>
+                </>
+              )}
+              {openDropdown === 'distribution' && (
+                <>
+                  <button onClick={() => { setActiveView('applications'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-emerald-500/20 text-white rounded-2xl transition-all text-sm font-bold"><Smartphone className="w-4 h-4 text-emerald-400 mr-3" /> Kontrol Aplikasi</button>
+                  <button onClick={() => { setActiveView('updates'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-emerald-500/20 text-white rounded-2xl transition-all text-sm font-bold"><UploadCloud className="w-4 h-4 text-emerald-400 mr-3" /> Pembaruan OTA</button>
+                </>
+              )}
+              {openDropdown === 'broadcast' && (
+                <>
+                  <button onClick={() => { setActiveView('notifications'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-amber-500/20 text-white rounded-2xl transition-all text-sm font-bold"><Bell className="w-4 h-4 text-amber-400 mr-3" /> Siaran Push</button>
+                  <button onClick={() => { setActiveView('announcements'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-amber-500/20 text-white rounded-2xl transition-all text-sm font-bold"><MessageSquare className="w-4 h-4 text-amber-400 mr-3" /> Pengumuman In-App</button>
+                  <button onClick={() => { setActiveView('config'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-amber-500/20 text-white rounded-2xl transition-all text-sm font-bold"><RefreshCw className="w-4 h-4 text-amber-400 mr-3" /> Remote Config</button>
+                </>
+              )}
+              {openDropdown === 'reports' && (
+                <>
+                  <button onClick={() => { setActiveView('analytics'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-rose-500/20 text-white rounded-2xl transition-all text-sm font-bold"><LayoutDashboard className="w-4 h-4 text-rose-400 mr-3" /> Analisis Sistem</button>
+                  <button onClick={() => { setActiveView('apkstats'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-rose-500/20 text-white rounded-2xl transition-all text-sm font-bold"><Database className="w-4 h-4 text-rose-400 mr-3" /> Statistik APK</button>
+                  <button onClick={() => { setActiveView('crash'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-rose-500/20 text-white rounded-2xl transition-all text-sm font-bold"><AlertTriangle className="w-4 h-4 text-rose-400 mr-3" /> Laporan Crash</button>
+                  <button onClick={() => { setActiveView('feedback'); setOpenDropdown(null); }} className="w-full flex items-center p-4 bg-white/5 hover:bg-rose-500/20 text-white rounded-2xl transition-all text-sm font-bold"><MessageSquare className="w-4 h-4 text-rose-400 mr-3" /> Pusat Masukan</button>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. MAIN VIEW SWITCHER */}
-      {activeView === 'dashboard' ? (
-        <main className="max-w-7xl mx-auto grid grid-cols-12 gap-y-12 gap-x-8">
+      {/* --- PROFILE & SETTINGS SHEET --- */}
+      {isMobileDrawerOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 transition-opacity flex justify-center items-end lg:items-center" onClick={() => setIsMobileDrawerOpen(false)}>
+          <div
+            className="w-full lg:w-96 bg-[#131825] border border-white/10 rounded-t-[2rem] lg:rounded-[2rem] p-6 pb-12 lg:pb-6 shadow-2xl animate-[slideUp_0.3s_ease-out]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6 lg:hidden" />
 
-          {/* BLOCK 1: Activation Trends (Left Heavy - Spans 8 columns) */}
-          <section className="col-span-12 lg:col-span-8 bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-8 rounded-[24px] flex flex-col justify-between">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <span className="tracking-widest text-[9px] font-bold text-[#64748B] uppercase">Telemetry Log</span>
-                <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1">Rolling 7-Day Onboarding Activations</h3>
+            <div className="bg-white/5 border border-white/10 p-5 rounded-2xl flex items-center space-x-4 mb-6">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-500 flex items-center justify-center font-black text-white text-lg shadow-[0_0_15px_rgba(14,165,233,0.3)]">
+                {profile?.name?.charAt(0) || 'A'}
               </div>
+              <div>
+                <h4 className="text-white font-black text-lg">{profile?.name || 'Administrator'}</h4>
+                <p className="text-xs text-slate-400 font-mono mb-1">{profile?.email || 'admin@system.com'}</p>
+                <span className="text-[9px] font-bold uppercase bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/30">
+                  {profile?.role || 'owner'}
+                </span>
+              </div>
+            </div>
 
-              {/* Neumorphic Reload button */}
-              <button
-                onClick={fetchDashboardData}
-                disabled={loading}
-                className="border border-white bg-white hover:border-[#0EA5E9]/50 hover:bg-[#0EA5E9]/10 text-[#1E293B] hover:text-[#0EA5E9] px-4 py-2 text-xs rounded-lg transition-all duration-300 shadow-sm flex items-center space-x-2 font-bold disabled:opacity-40"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                <span>Sync Data</span>
+            <button
+              onClick={() => { onLogout(); setIsMobileDrawerOpen(false); }}
+              className="w-full flex items-center justify-center p-4 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-2xl transition-colors font-bold"
+            >
+              <LogOut className="w-5 h-5 mr-2" /> Sign Out System
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MAIN CONTENT AREA --- */}
+      <div className="px-4 md:px-6 lg:px-8 max-w-[1400px] mx-auto">
+        {activeView === 'dashboard' ? (
+          <div className="space-y-6">
+
+            {/* 1. QUICK ACTIONS ROW */}
+            <div className="grid grid-cols-3 gap-3 md:gap-6">
+              <button onClick={() => setActiveView('licenses')} className="bg-[#131825] hover:bg-white/5 border border-white/5 rounded-3xl p-4 flex flex-col items-center justify-center space-y-3 transition-all group shadow-lg">
+                <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Plus className="w-6 h-6 text-indigo-400" />
+                </div>
+                <span className="text-[10px] md:text-xs font-bold text-slate-300 uppercase tracking-widest">Buat Lisensi</span>
+              </button>
+
+              <button onClick={() => setActiveView('feedback')} className="bg-[#131825] hover:bg-white/5 border border-white/5 rounded-3xl p-4 flex flex-col items-center justify-center space-y-3 transition-all group shadow-lg">
+                <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <AlertTriangle className="w-6 h-6 text-rose-400" />
+                </div>
+                <span className="text-[10px] md:text-xs font-bold text-slate-300 uppercase tracking-widest">Cek Laporan</span>
+              </button>
+
+              <button onClick={() => setActiveView('updates')} className="bg-[#131825] hover:bg-white/5 border border-white/5 rounded-3xl p-4 flex flex-col items-center justify-center space-y-3 transition-all group shadow-lg">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <UploadCloud className="w-6 h-6 text-emerald-400" />
+                </div>
+                <span className="text-[10px] md:text-xs font-bold text-slate-300 uppercase tracking-widest">Update OTA</span>
               </button>
             </div>
 
-            {/* Glowing SVG Area Line Chart (Sky Blue accent) */}
-            <div className="w-full h-56 flex items-end justify-center relative py-4 bg-white/50 border border-white/60 rounded-xl">
-              {loading ? (
-                <div className="flex items-center space-x-2 text-[#64748B] font-semibold text-xs">
-                  <RefreshCw className="w-4 h-4 animate-spin text-[#0EA5E9]" />
-                  <span>FETCHING_LIVE_STREAM...</span>
-                </div>
-              ) : (
-                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 500 130" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="lightAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0EA5E9" stopOpacity="0.12" />
-                      <stop offset="100%" stopColor="#0EA5E9" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  {/* Structural grid lines */}
-                  <line x1="0" y1="32" x2="500" y2="32" stroke="#E2E8F0" strokeWidth="1" strokeDasharray="3,3" />
-                  <line x1="0" y1="65" x2="500" y2="65" stroke="#E2E8F0" strokeWidth="1" strokeDasharray="3,3" />
-                  <line x1="0" y1="98" x2="500" y2="98" stroke="#E2E8F0" strokeWidth="1" strokeDasharray="3,3" />
+            <main className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                  {/* SVG Area */}
-                  <path
-                    d="M 0 130 L 0 95 L 83 75 L 166 85 L 249 45 L 332 65 L 415 25 L 500 30 L 500 130 Z"
-                    fill="url(#lightAreaGrad)"
-                  />
+              {/* BLOCK 1: Neon Activation Chart */}
+              <section className="col-span-1 lg:col-span-8 bg-[#131825] border border-white/5 shadow-2xl p-6 md:p-8 rounded-[2rem] flex flex-col relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 blur-[100px] rounded-full pointer-events-none" />
 
-                  {/* Sky Blue vector path */}
-                  <path
-                    d="M 0 95 L 83 75 L 166 85 L 249 45 L 332 65 L 415 25 L 500 30"
-                    fill="none"
-                    stroke="#0EA5E9"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  {/* Markers */}
-                  <circle cx="0" cy="95" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                  <circle cx="83" cy="75" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                  <circle cx="166" cy="85" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                  <circle cx="249" cy="45" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                  <circle cx="332" cy="65" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                  <circle cx="415" cy="25" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                  <circle cx="500" cy="30" r="3" fill="#0EA5E9" stroke="#ffffff" strokeWidth="1" />
-                </svg>
-              )}
-
-              {/* Data Days overlay */}
-              {!loading && (
-                <div className="absolute inset-0 flex justify-between px-4 pt-6 pointer-events-none">
-                  {activationHistory.map((h, i) => (
-                    <div key={i} className="flex flex-col justify-between h-full items-center text-[10px] text-[#64748B] font-bold">
-                      <span className="text-[#0EA5E9] font-mono tracking-tighter opacity-0 group-hover:opacity-100">{h.count}</span>
-                      <span className="mt-auto pt-2">{h.day}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center text-xs text-[#64748B] mt-6 font-semibold">
-              <span>Overall weekly activation average</span>
-              <span className="text-[#0EA5E9] font-black">21.1 / Day</span>
-            </div>
-          </section>
-
-          {/* BLOCK 2: Metric Stack (Right Side - Spans 4 columns) */}
-          <section className="col-span-12 lg:col-span-4 bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-8 rounded-[24px] flex flex-col justify-between space-y-6">
-            <div>
-              <span className="tracking-widest text-[9px] font-bold text-[#64748B] uppercase">Tumpukan Telemetri</span>
-              <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1 mb-6">Penghitung Operasi Inti</h3>
-            </div>
-
-            <div className="space-y-5 flex-grow">
-
-              {/* Metric 1: ACTIVE_LICENSES (Massive Sky Blue Digits) */}
-              <div className="border-b border-[#F0F2F5] pb-3">
-                <span className="text-[10px] text-[#64748B] font-bold tracking-widest block uppercase">Lisensi Aktif</span>
-                <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-4xl md:text-5xl font-black text-[#0EA5E9] tracking-tight">
-                    {loading ? '...' : metrics.activeLicenses}
-                  </span>
-                  <span className="text-[10px] text-green-500 font-bold">[ +4.2% ]</span>
-                </div>
-              </div>
-
-              {/* Metric 2: TOTAL_DEVICES */}
-              <div className="border-b border-[#F0F2F5] pb-3">
-                <span className="text-[10px] text-[#64748B] font-bold tracking-widest block uppercase">Total Perangkat</span>
-                <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-3xl font-black text-[#1E293B] tracking-tight">
-                    {loading ? '...' : metrics.activeDevices}
-                  </span>
-                  <span className="text-[9px] text-[#64748B] uppercase font-bold pl-1">Host Perangkat Keras</span>
-                </div>
-              </div>
-
-              {/* Metric 3: EXPIRED_ALERTS (Underlined with thin gray line) */}
-              <div className="pb-1">
-                <span className="text-[10px] text-red-500 font-bold tracking-widest block uppercase">Lisensi Kedaluwarsa</span>
-                <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-3xl font-black text-red-500 tracking-tight">
-                    {loading ? '...' : metrics.expiredLicenses}
-                  </span>
-                  <span className="text-[9px] text-[#64748B] uppercase font-bold pl-1 underline decoration-red-300">Pembaruan Diperlukan</span>
-                </div>
-              </div>
-
-            </div>
-          </section>
-
-          {/* BLOCK 3: Terminal Logs Feed (Bottom Full Width - 12 columns) */}
-          <section className="col-span-12 bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-8 rounded-[24px]">
-            <div className="flex justify-between items-center mb-6 pl-1 pr-1">
-              <div className="flex items-center space-x-3">
-                <Database className="w-4 h-4 text-[#0EA5E9]" />
-                <h3 className="text-xs font-bold text-[#1E293B] tracking-widest uppercase">AUDIT_LOG // STDOUT_STREAM</h3>
-              </div>
-              <span className="text-[9px] bg-green-100 text-green-600 px-2 py-0.5 rounded font-bold uppercase border border-green-200">
-                DB_HEALTH_OK
-              </span>
-            </div>
-
-            {/* Alternating Light rows for Logs list */}
-            <div className="border border-gray-200/60 rounded-xl overflow-hidden divide-y divide-gray-100 text-xs font-mono select-text">
-              {logs.map((log, idx) => {
-                let badgeStyle = 'bg-gray-100 text-gray-600 border border-gray-200';
-                let textClass = 'text-[#64748B]';
-
-                if (log.severity === 'warning') {
-                  badgeStyle = 'bg-yellow-50 text-yellow-600 border border-yellow-200';
-                  textClass = 'text-yellow-700';
-                }
-                if (log.severity === 'critical') {
-                  badgeStyle = 'bg-red-50 text-red-600 border border-red-200';
-                  textClass = 'text-red-700 font-bold';
-                }
-
-                return (
-                  <div key={log.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-2 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                    <div className="flex flex-wrap items-center gap-x-3">
-                      <span className="text-gray-400 font-semibold text-[10px]">[{log.created_at}]</span>
-                      <span className={`px-2 py-0.5 rounded text-[8px] font-bold ${badgeStyle}`}>
-                        {log.action}
-                      </span>
-                      <span className={`text-[11px] ${textClass}`}>{log.description}</span>
-                    </div>
-                    <span className="text-[9px] text-gray-400 hidden sm:inline">[ SUCCESS ]</span>
+                <div className="flex justify-between items-start mb-8 relative z-10">
+                  <div>
+                    <span className="tracking-widest text-[9px] font-bold text-sky-400 uppercase">Telemetry Log</span>
+                    <h3 className="text-base font-black text-white tracking-tight mt-1">Rolling 7-Day Activations</h3>
                   </div>
-                );
-              })}
-            </div>
-          </section>
-        </main>
-      ) : activeView === 'analytics' ? (
-        // RENDER ANALYTICS DASHBOARD
-        <main className="max-w-7xl mx-auto">
-          <AnalyticsDashboard />
-        </main>
-      ) : activeView === 'apkstats' ? (
-        // RENDER APK DOWNLOAD STATISTICS MODULE
-        <main className="max-w-7xl mx-auto">
-          <ApkStatsDashboard />
-        </main>
-      ) : activeView === 'crash' ? (
-        // RENDER CRASH & ERROR REPORT MODULE
-        <main className="max-w-7xl mx-auto">
-          <CrashReportScreen />
-        </main>
-      ) : activeView === 'licenses' ? (
-        // RENDER LICENSE SCREEN TABLE WORKSPACE
-        <LicenseScreen />
-      ) : activeView === 'customers' ? (
-        // RENDER CUSTOMER SCREEN TABLE WORKSPACE
-        <CustomerScreen />
-      ) : activeView === 'applications' ? (
-        // RENDER APPLICATION SCREEN TABLE WORKSPACE
-        <AppManagementScreen />
-      ) : activeView === 'updates' ? (
-        // RENDER OTA UPDATES SCREEN TABLE WORKSPACE
-        <UpdateManagementScreen />
-      ) : activeView === 'notifications' ? (
-        // RENDER PUSH NOTIFICATION SCREEN TABLE WORKSPACE
-        <NotificationScreen />
-      ) : activeView === 'announcements' ? (
-        // RENDER IN-APP ANNOUNCEMENT SCREEN TABLE WORKSPACE
-        <AnnouncementScreen />
-      ) : activeView === 'feedback' ? (
-        // RENDER FEEDBACK CENTER WORKSPACE
-        <FeedbackCenterScreen session={session} />
-      ) : (
-        // RENDER REMOTE CONFIGURATION SCREEN TABLE WORKSPACE
-        <RemoteConfigScreen />
-      )}
+                  <button
+                    onClick={fetchDashboardData}
+                    disabled={loading}
+                    className="bg-white/5 hover:bg-sky-500/20 border border-white/10 hover:border-sky-500/30 text-slate-300 hover:text-sky-400 p-2 md:px-4 md:py-2 rounded-xl transition-all duration-300 flex items-center space-x-2 font-bold disabled:opacity-40"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    <span className="hidden md:inline text-xs">Sync Data</span>
+                  </button>
+                </div>
 
-      {/* Premium In-App Toast Stack */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full pointer-events-none">
+                <div className="w-full h-56 flex items-end justify-center relative py-4 z-10">
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center space-y-3 text-sky-400 font-mono text-xs">
+                      <RefreshCw className="w-6 h-6 animate-spin" />
+                      <span>FETCHING_STREAM...</span>
+                    </div>
+                  ) : (
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 500 130" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="neonGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" y1="32" x2="500" y2="32" stroke="#1e293b" strokeWidth="1" strokeDasharray="4,4" />
+                      <line x1="0" y1="65" x2="500" y2="65" stroke="#1e293b" strokeWidth="1" strokeDasharray="4,4" />
+                      <line x1="0" y1="98" x2="500" y2="98" stroke="#1e293b" strokeWidth="1" strokeDasharray="4,4" />
+                      <path d="M 0 130 L 0 95 L 83 75 L 166 85 L 249 45 L 332 65 L 415 25 L 500 30 L 500 130 Z" fill="url(#neonGradient)" />
+                      <path d="M 0 95 L 83 75 L 166 85 L 249 45 L 332 65 L 415 25 L 500 30" fill="none" stroke="#38bdf8" strokeWidth="3" filter="drop-shadow(0 0 8px rgba(56,189,248,0.6))" strokeLinecap="round" strokeLinejoin="round" />
+                      <circle cx="83" cy="75" r="4" fill="#090D16" stroke="#38bdf8" strokeWidth="2" />
+                      <circle cx="166" cy="85" r="4" fill="#090D16" stroke="#38bdf8" strokeWidth="2" />
+                      <circle cx="249" cy="45" r="4" fill="#090D16" stroke="#38bdf8" strokeWidth="2" />
+                      <circle cx="332" cy="65" r="4" fill="#090D16" stroke="#38bdf8" strokeWidth="2" />
+                      <circle cx="415" cy="25" r="4" fill="#090D16" stroke="#38bdf8" strokeWidth="2" />
+                    </svg>
+                  )}
+                  {!loading && (
+                    <div className="absolute inset-0 flex justify-between px-4 pt-6 pointer-events-none">
+                      {activationHistory.map((h, i) => (
+                        <div key={i} className="flex flex-col justify-between h-full items-center text-[10px] text-slate-500 font-bold">
+                          <span className="text-sky-400 font-mono opacity-0">{h.count}</span>
+                          <span className="mt-auto pt-2">{h.day}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* BLOCK 2: Core Operations Counters */}
+              <section className="col-span-1 lg:col-span-4 bg-[#131825] border border-white/5 shadow-2xl p-6 md:p-8 rounded-[2rem] flex flex-col justify-between space-y-6">
+                <div>
+                  <span className="tracking-widest text-[9px] font-bold text-emerald-400 uppercase">Metric Stack</span>
+                  <h3 className="text-base font-black text-white tracking-tight mt-1 mb-6">Operasi Inti</h3>
+                </div>
+
+                <div className="space-y-6 flex-grow">
+                  <div className="bg-white/5 p-4 rounded-2xl border border-white/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/20 blur-[50px]" />
+                    <span className="text-[10px] text-slate-400 font-bold tracking-widest block uppercase">Lisensi Aktif</span>
+                    <div className="flex items-baseline space-x-2 mt-2">
+                      <span className="text-4xl font-black text-sky-400 tracking-tight drop-shadow-[0_0_10px_rgba(56,189,248,0.4)]">
+                        {loading ? '...' : metrics.activeLicenses}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-end pb-3 border-b border-white/10 px-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold tracking-widest block uppercase">Total Perangkat</span>
+                      <span className="text-2xl font-black text-white tracking-tight mt-1 block">{loading ? '...' : metrics.activeDevices}</span>
+                    </div>
+                    <Smartphone className="w-6 h-6 text-slate-500 mb-2" />
+                  </div>
+
+                  <div className="flex justify-between items-end px-2">
+                    <div>
+                      <span className="text-[10px] text-rose-500 font-bold tracking-widest block uppercase">Perlu Pembaruan</span>
+                      <span className="text-2xl font-black text-rose-500 tracking-tight mt-1 block">{loading ? '...' : metrics.expiredLicenses}</span>
+                    </div>
+                    <AlertTriangle className="w-6 h-6 text-rose-500/50 mb-2" />
+                  </div>
+                </div>
+              </section>
+
+              {/* BLOCK 3: Terminal Audit Logs */}
+              <section className="col-span-1 lg:col-span-12 bg-black/60 border border-white/5 shadow-2xl p-6 md:p-8 rounded-[2rem] font-mono">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center space-x-3">
+                    <Terminal className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-[10px] sm:text-xs font-bold text-slate-400 tracking-widest uppercase">AUDIT_LOG // STDOUT</h3>
+                  </div>
+                  <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded uppercase border border-emerald-500/30">
+                    SYS_OK
+                  </span>
+                </div>
+
+                <div className="text-[10px] sm:text-xs text-slate-400 space-y-3">
+                  {logs.map((log) => {
+                    let logColor = 'text-emerald-400';
+                    if (log.severity === 'warning') logColor = 'text-amber-400';
+                    if (log.severity === 'critical') logColor = 'text-rose-500 font-bold';
+
+                    return (
+                      <div key={log.id} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 hover:bg-white/5 p-1.5 -mx-1.5 rounded-lg transition-colors">
+                        <span className="text-slate-600 flex-shrink-0">[{log.created_at}]</span>
+                        <div className="flex-grow flex flex-col sm:flex-row sm:items-center sm:space-x-3">
+                          <span className={`px-2 py-0.5 rounded text-[9px] bg-white/10 uppercase tracking-wider ${logColor}`}>
+                            {log.action}
+                          </span>
+                          <span className={`break-all ${logColor}`}>{log.description}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+            </main>
+          </div>
+        ) : (
+          // RENDER OTHER VIEWS
+          <div className="bg-[#131825] border border-white/5 rounded-[2rem] p-4 md:p-8 min-h-[70vh]">
+            <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-white/10">
+              <button onClick={() => setActiveView('dashboard')} className="text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-xl transition-colors">
+                <ChevronUp className="w-5 h-5 -rotate-90" />
+              </button>
+              <h2 className="text-white font-black uppercase tracking-widest text-sm">Active Workspace</h2>
+            </div>
+
+            {activeView === 'analytics' && <AnalyticsDashboard />}
+            {activeView === 'apkstats' && <ApkStatsDashboard />}
+            {activeView === 'crash' && <CrashReportScreen />}
+            {activeView === 'licenses' && <LicenseScreen />}
+            {activeView === 'customers' && <CustomerScreen />}
+            {activeView === 'applications' && <AppManagementScreen />}
+            {activeView === 'updates' && <UpdateManagementScreen />}
+            {activeView === 'notifications' && <NotificationScreen />}
+            {activeView === 'announcements' && <AnnouncementScreen />}
+            {activeView === 'feedback' && <FeedbackCenterScreen session={session} />}
+            {activeView === 'config' && <RemoteConfigScreen />}
+          </div>
+        )}
+      </div>
+
+      {/* --- TOAST NOTIFICATIONS --- */}
+      <div className="fixed top-6 right-6 z-[100] flex flex-col space-y-3 max-w-[85vw] sm:max-w-sm w-full pointer-events-none">
         {toasts.map((t) => {
-          let icon = <Bell className="w-5 h-5 text-blue-500" />;
-          let borderStyle = 'border-blue-100';
-          let bgStyle = 'bg-white/95';
-          
+          let icon = <Bell className="w-5 h-5 text-sky-400" />;
+          let bgStyle = 'bg-[#1A2133]/95 border-sky-500/30';
+
           if (t.type === 'activation') {
-            icon = <Key className="w-5 h-5 text-amber-500 animate-pulse" />;
-            borderStyle = 'border-amber-200';
-            bgStyle = 'bg-amber-50/95';
+            icon = <Key className="w-5 h-5 text-amber-400 animate-pulse" />;
+            bgStyle = 'bg-[#1A2133]/95 border-amber-500/30';
           } else if (t.type === 'feedback') {
-            icon = <AlertTriangle className="w-5 h-5 text-red-500 animate-bounce" />;
-            borderStyle = 'border-red-200';
-            bgStyle = 'bg-red-50/95';
+            icon = <AlertTriangle className="w-5 h-5 text-rose-500 animate-bounce" />;
+            bgStyle = 'bg-[#1A2133]/95 border-rose-500/30';
           }
 
           return (
             <div
               key={t.id}
-              className={`pointer-events-auto p-4 rounded-2xl shadow-xl border ${borderStyle} ${bgStyle} backdrop-blur-md flex items-start space-x-3 transition-all duration-500 transform translate-x-0 animate-[slideIn_0.3s_ease-out]`}
+              className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border ${bgStyle} backdrop-blur-xl flex items-start space-x-3 animate-[slideInRight_0.3s_ease-out]`}
             >
               <div className="flex-shrink-0 mt-0.5">{icon}</div>
               <div className="flex-grow min-w-0">
-                <h4 className="text-xs font-black text-slate-800 tracking-tight">{t.title}</h4>
-                <p className="text-[10px] font-medium text-slate-500 mt-1 whitespace-pre-wrap leading-relaxed">{t.body}</p>
+                <h4 className="text-xs font-black text-white tracking-tight">{t.title}</h4>
+                <p className="text-[10px] font-medium text-slate-400 mt-1 whitespace-pre-wrap leading-relaxed">{t.body}</p>
               </div>
               <button
                 onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
-                className="flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded-lg hover:bg-slate-100/50"
+                className="flex-shrink-0 text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           );
@@ -983,15 +616,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       </div>
 
       <style>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(120%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slideInRight {
+          from { transform: translateX(120%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
       `}</style>
     </div>
