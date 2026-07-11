@@ -159,17 +159,28 @@ export const LicenseScreen: React.FC = () => {
   const handleResetDevice = async (id: string) => {
     setActionLoading(id);
     try {
-      // Call Supabase Edge Function 'reset-device-association'
-      const { error } = await supabase.functions.invoke('reset-device-association', {
-        body: { license_id: id }
-      });
+      // 1. Directly delete from public.devices table
+      const { error: deleteError } = await supabase
+        .from('devices')
+        .delete()
+        .eq('license_id', id);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
+
+      // 2. Explicitly update the licenses table to ensure status is PENDING and associated_device is UNBOUND (bypassing any buggy DB triggers)
+      const { error: updateError } = await supabase
+        .from('licenses')
+        .update({ status: 'PENDING', associated_device: 'UNBOUND' })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
 
       // Update state locally upon success
-      setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, associated_device: null } : lic));
+      setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, associated_device: null, status: 'PENDING' } : lic));
+      window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
-      console.error('Reset device Edge Function invocation failed: ', err);
+      console.error('Reset device failed: ', err);
+      alert('Gagal meriset perangkat.');
     } finally {
       setActionLoading(null);
     }
@@ -496,7 +507,7 @@ export const LicenseScreen: React.FC = () => {
                           </button>
                         )}
 
-                        {lic.status === 'SUSPENDED' && (
+                        {(lic.status === 'SUSPENDED' || lic.status === 'INACTIVE') && (
                           <button
                             disabled={actionLoading !== null}
                             onClick={() => handleOpenSuspend(lic.id)}
@@ -618,7 +629,7 @@ export const LicenseScreen: React.FC = () => {
                     </button>
                   )}
 
-                  {lic.status === 'SUSPENDED' && (
+                  {(lic.status === 'SUSPENDED' || lic.status === 'INACTIVE') && (
                     <button
                       disabled={actionLoading !== null}
                       onClick={() => handleOpenSuspend(lic.id)}
