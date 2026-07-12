@@ -105,21 +105,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] flex flex-col items-center justify-center p-6 select-none font-['Outfit'] overflow-hidden relative">
-      
+
       {/* Decorative premium gradients (Glassmorphism bg elements) */}
       <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-[#0EA5E9]/10 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-[#0EA5E9]/10 blur-[120px] pointer-events-none" />
 
       {/* Main card viewport */}
       <div className="w-full max-w-[420px] bg-white/80 backdrop-blur-md border border-white/60 p-8 rounded-[24px] shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 relative z-10">
-        
+
         {/* Header Branding */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-[18px] bg-[#0EA5E9] flex items-center justify-center shadow-lg shadow-[#0EA5E9]/20 mb-4 transform hover:rotate-6 transition-transform duration-300">
             <span className="text-white font-bold text-2xl tracking-wider">Ar</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#1E293B] tracking-tight">ArLABS System</h1>
-          <p className="text-sm text-[#64748B] mt-1">SaaS Administrator Console</p>
+          <h1 className="text-2xl font-bold text-[#1E293B] tracking-tight">ArLABS Sistem</h1>
+          <p className="text-sm text-[#64748B] mt-1">Administrator Console</p>
         </div>
 
         {/* Dynamic Alerts */}
@@ -186,11 +186,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             {loading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Authenticating Console...</span>
+                <span>Loading...</span>
               </>
             ) : (
               <>
-                <span>Sign In To Workspace</span>
+                <span>Masuk</span>
                 <ArrowRight className="w-4 h-4 transition-transform duration-200" />
               </>
             )}
@@ -199,7 +199,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
         {/* Footer */}
         <div className="mt-8 text-center text-xs text-[#64748B]/50">
-          <p>© 2026 ArLABS. Secure Console Sandbox.</p>
+          <p>Created By Ardev @Ardev LABS</p>
         </div>
       </div>
     </div>
