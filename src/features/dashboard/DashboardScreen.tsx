@@ -30,7 +30,6 @@ import {
   LogOut,
   ChevronUp,
   Smartphone,
-  Cpu,
   Activity
 } from 'lucide-react';
 
