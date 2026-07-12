@@ -92,8 +92,8 @@ export const UpdateManagementScreen: React.FC = () => {
     setUploadStatus('UPLOADING');
     setUploadErrorMsg('');
 
-    const workerUrl = (import.meta as any).env?.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
-    const uploadSecret = (import.meta as any).env?.VITE_CLOUDFLARE_UPLOAD_SECRET;
+    const workerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+    const uploadSecret = import.meta.env.VITE_CLOUDFLARE_UPLOAD_SECRET;
 
     if (!uploadSecret || uploadSecret === 'YOUR_UPLOAD_SECRET_HERE') {
       setUploadStatus('ERROR');

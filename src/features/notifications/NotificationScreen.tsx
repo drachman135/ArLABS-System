@@ -184,9 +184,9 @@ export const NotificationScreen: React.FC = () => {
   };
 
   const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
-    const projectId = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID;
-    const clientEmail = (import.meta as any).env?.VITE_FIREBASE_CLIENT_EMAIL;
-    const privateKey = (import.meta as any).env?.VITE_FIREBASE_PRIVATE_KEY;
+    const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+    const clientEmail = import.meta.env.VITE_FIREBASE_CLIENT_EMAIL;
+    const privateKey = import.meta.env.VITE_FIREBASE_PRIVATE_KEY;
 
     if (!projectId || !clientEmail || !privateKey) {
       throw new Error(

@@ -150,7 +150,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   }, []);
 
   useEffect(() => {
-    const onesignalAppId = (import.meta as any).env?.VITE_ONESIGNAL_APP_ID;
+    const onesignalAppId = import.meta.env.VITE_ONESIGNAL_APP_ID;
     if (!onesignalAppId) return;
 
     const initOneSignal = async () => {

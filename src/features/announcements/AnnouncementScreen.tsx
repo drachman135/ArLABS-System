@@ -105,8 +105,8 @@ export const AnnouncementScreen: React.FC = () => {
 
       if (error) throw error;
 
-      const workerUrl = (import.meta as any).env?.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
-      const uploadSecret = (import.meta as any).env?.VITE_CLOUDFLARE_UPLOAD_SECRET;
+      const workerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+      const uploadSecret = import.meta.env.VITE_CLOUDFLARE_UPLOAD_SECRET;
 
       if (!uploadSecret) {
         console.error("Cloudflare upload secret not configured. Skipping JSON sync.");
@@ -198,8 +198,8 @@ export const AnnouncementScreen: React.FC = () => {
 
       // Step 1: Upload image if selected to Cloudflare R2
       if (imageFile) {
-        const workerUrl = (import.meta as any).env?.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
-        const uploadSecret = (import.meta as any).env?.VITE_CLOUDFLARE_UPLOAD_SECRET;
+        const workerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+        const uploadSecret = import.meta.env.VITE_CLOUDFLARE_UPLOAD_SECRET;
 
         if (!uploadSecret) {
           throw new Error("Kunci rahasia VITE_CLOUDFLARE_UPLOAD_SECRET belum dikonfigurasi di file .env.local.");
