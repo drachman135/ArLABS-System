@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import feedbackHandler from './api/feedback';
 import feedbackIdHandler from './api/feedback/[id]';
 import notifyActivationHandler from './api/notify-activation';
+import sendNotificationHandler from './api/send-notification';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -19,8 +20,8 @@ export default defineConfig(({ mode }) => {
           const apiMiddleware = async (req: any, res: any, next: any) => {
             const url = req.url || '';
             
-            // Match /api/feedback and /api/notify-activation paths
-            if (url.startsWith('/api/feedback') || url.startsWith('/api/notify-activation')) {
+            // Match /api/feedback, /api/notify-activation, and /api/send-notification paths
+            if (url.startsWith('/api/feedback') || url.startsWith('/api/notify-activation') || url.startsWith('/api/send-notification')) {
               try {
                 const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
                 const pathname = parsedUrl.pathname;
@@ -74,6 +75,11 @@ export default defineConfig(({ mode }) => {
                       ? notifyActivationHandler
                       : (notifyActivationHandler as any).default;
                     await notifyFn(req, mockRes);
+                  } else if (pathname === '/api/send-notification' || pathname === '/api/send-notification/') {
+                    const sendNotifFn = typeof sendNotificationHandler === 'function'
+                      ? sendNotificationHandler
+                      : (sendNotificationHandler as any).default;
+                    await sendNotifFn(req, mockRes);
                   } else {
                     next();
                   }
