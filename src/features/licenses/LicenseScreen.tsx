@@ -97,7 +97,6 @@ export const LicenseScreen: React.FC = () => {
   
   // Generator State
   const [generationMode, setGenerationMode] = useState<'RELEASE' | 'RE_GENERATE'>('RELEASE');
-  const [latestDownloadUrl, setLatestDownloadUrl] = useState<string>('https://link.arlabs.io/download-apk');
   const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
   const [showDetailedSuccess, setShowDetailedSuccess] = useState<boolean>(false);
   const [generatedTemplate, setGeneratedTemplate] = useState<string>('');
@@ -162,33 +161,7 @@ export const LicenseScreen: React.FC = () => {
     return new Date(lic.expires_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  // Fetch latest download URL
-  const fetchLatestDownloadUrl = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('application_versions')
-        .select('download_url')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1);
 
-      if (!error && data && data.length > 0) {
-        setLatestDownloadUrl(data[0].download_url);
-      } else {
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('application_versions')
-          .select('download_url')
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (!fallbackError && fallbackData && fallbackData.length > 0) {
-          setLatestDownloadUrl(fallbackData[0].download_url);
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to fetch latest APK download URL:', err);
-    }
-  };
 
   // Fetch applications list from Supabase
   const fetchAppsList = async () => {
@@ -224,7 +197,6 @@ export const LicenseScreen: React.FC = () => {
 
   useEffect(() => {
     fetchLicenses();
-    fetchLatestDownloadUrl();
     fetchAppsList();
   }, []);
 
@@ -350,7 +322,7 @@ export const LicenseScreen: React.FC = () => {
     try {
       const selectedApp = appsList.find(app => app.id === selectedAppId);
       const appName = selectedApp ? selectedApp.app_name : 'Aplikasi Kami';
-      let apkUrl = selectedApp?.download_url || latestDownloadUrl;
+      let apkUrl = '';
 
       if (selectedAppId) {
         try {
