@@ -22,6 +22,12 @@ interface ApplicationOption {
   app_name: string;
 }
 
+declare global {
+  interface Window {
+    AppInfoParser: any;
+  }
+}
+
 export const UpdateManagementScreen: React.FC = () => {
   const [updates, setUpdates] = useState<AppUpdate[]>([]);
   const [apps, setApps] = useState<ApplicationOption[]>([]);
@@ -32,6 +38,9 @@ export const UpdateManagementScreen: React.FC = () => {
   const [latestVersionInfo, setLatestVersionInfo] = useState<string>('Memuat info rilis...');
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [fetchingLatest, setFetchingLatest] = useState<boolean>(false);
+  const [versionWarning, setVersionWarning] = useState<string>('');
+  const [latestVersionCodeNum, setLatestVersionCodeNum] = useState<number>(0);
+  const [latestVersionNameStr, setLatestVersionNameStr] = useState<string>('');
 
   // Form states
   const [selectedAppId, setSelectedAppId] = useState<string>('');
@@ -100,6 +109,39 @@ export const UpdateManagementScreen: React.FC = () => {
       setUploadStatus('ERROR');
       setUploadErrorMsg('Ukuran file melebihi batas maksimal 100MB.');
       return;
+    }
+
+    // Ekstraksi Metadata APK secara otomatis di browser via CDN
+    if (window.AppInfoParser) {
+      const parser = new window.AppInfoParser(file);
+      parser.parse().then((result: any) => {
+        const pkg = result.package || (result.manifest && result.manifest.package);
+        const verName = result.versionName || (result.manifest && result.manifest.versionName);
+        const verCode = result.versionCode || (result.manifest && result.manifest.versionCode);
+
+        console.log("Parsed APK metadata:", { pkg, verName, verCode });
+
+        if (pkg) {
+          const matchedApp = apps.find(a => a.package_name.toLowerCase() === pkg.toLowerCase());
+          if (matchedApp) {
+            setSelectedAppId(matchedApp.id);
+            setSelectedPackage(matchedApp.package_name);
+          } else {
+            console.warn(`Package '${pkg}' belum terdaftar. Tetap mengunggah.`);
+          }
+        }
+
+        if (verName) {
+          setVersionName(verName);
+        }
+
+        if (verCode) {
+          const codeVal = parseInt(verCode) || 0;
+          setVersionCode(codeVal);
+        }
+      }).catch((err: any) => {
+        console.warn("Gagal membaca metadata APK. Menggunakan fallback form.", err);
+      });
     }
 
     setUploadFile(file);
@@ -226,10 +268,14 @@ export const UpdateManagementScreen: React.FC = () => {
 
       if (data) {
         setLatestVersionInfo(`Terakhir: ${data.version_name} (Code: ${data.version_code})`);
+        setLatestVersionCodeNum(data.version_code);
+        setLatestVersionNameStr(data.version_name);
         setVersionCode(data.version_code + 1);
         setVersionName(suggestNextVersion(data.version_name));
       } else {
         setLatestVersionInfo('Belum ada rilis versi terdaftar');
+        setLatestVersionCodeNum(0);
+        setLatestVersionNameStr('');
         setVersionCode(1);
         setVersionName('v1.0.0');
       }
@@ -243,9 +289,13 @@ export const UpdateManagementScreen: React.FC = () => {
         const sorted = [...matchingUpdates].sort((a, b) => b.version_code - a.version_code);
         const latest = sorted[0];
         setLatestVersionInfo(`Terakhir (Lokal): ${latest.version_name} (Code: ${latest.version_code})`);
+        setLatestVersionCodeNum(latest.version_code);
+        setLatestVersionNameStr(latest.version_name);
         setVersionCode(latest.version_code + 1);
         setVersionName(suggestNextVersion(latest.version_name));
       } else {
+        setLatestVersionCodeNum(0);
+        setLatestVersionNameStr('');
         setVersionCode(1);
         setVersionName('v1.0.0');
       }
@@ -324,6 +374,32 @@ export const UpdateManagementScreen: React.FC = () => {
       fetchLatestVersionInfo(selectedAppId);
     }
   }, [selectedAppId]);
+
+  // Validation useEffect for warning if version code/name is lower or equal to database
+  useEffect(() => {
+    if (!latestVersionCodeNum) {
+      setVersionWarning('');
+      return;
+    }
+
+    let warning = '';
+    
+    // 1. Compare version codes
+    if (versionCode <= latestVersionCodeNum) {
+      warning = `Version Code (${versionCode}) lebih rendah atau sama dengan versi terakhir di database (Code: ${latestVersionCodeNum}).`;
+    }
+    
+    // 2. Compare version names
+    else if (versionName && latestVersionNameStr) {
+      const cleanNew = versionName.replace(/^v/i, '').trim();
+      const cleanOld = latestVersionNameStr.replace(/^v/i, '').trim();
+      if (cleanNew === cleanOld) {
+        warning = `Version Name (${versionName}) sama dengan versi rilis terakhir di database.`;
+      }
+    }
+
+    setVersionWarning(warning);
+  }, [versionCode, versionName, latestVersionCodeNum, latestVersionNameStr]);
 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -648,6 +724,17 @@ export const UpdateManagementScreen: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Peringatan Downgrade/Konflik Versi */}
+            {versionWarning && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl flex items-start space-x-2 animate-pulse shadow-sm">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider block text-amber-900">Peringatan Konflik Versi</span>
+                  <span className="text-[10px] leading-relaxed block font-semibold">{versionWarning}</span>
+                </div>
+              </div>
+            )}
 
             {/* Submit deploy */}
             <button
