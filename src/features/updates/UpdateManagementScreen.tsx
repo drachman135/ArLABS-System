@@ -13,6 +13,7 @@ interface AppUpdate {
   download_url?: string;
   is_force_update: boolean;
   force_update?: boolean;
+  is_active?: boolean;
   created_at: string;
 }
 
@@ -41,6 +42,7 @@ export const UpdateManagementScreen: React.FC = () => {
   const [versionWarning, setVersionWarning] = useState<string>('');
   const [latestVersionCodeNum, setLatestVersionCodeNum] = useState<number>(0);
   const [latestVersionNameStr, setLatestVersionNameStr] = useState<string>('');
+  const [mobileActiveView, setMobileActiveView] = useState<'FORM' | 'HISTORY'>('FORM');
 
   // Form states
   const [selectedAppId, setSelectedAppId] = useState<string>('');
@@ -304,13 +306,130 @@ export const UpdateManagementScreen: React.FC = () => {
     }
   };
 
+  // Feature 1: Toggle release active state in Supabase
+  const toggleReleaseActiveState = async (id: string, currentStatus: boolean) => {
+    try {
+      const newStatus = !currentStatus;
+      const { error } = await supabase
+        .from('application_versions')
+        .update({ is_active: newStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update state locally
+      setUpdates(prev => prev.map(upd => upd.id === id ? { ...upd, is_active: newStatus } : upd));
+    } catch (err: any) {
+      console.error("Gagal mengubah status aktif rilis:", err);
+      alert("Gagal mengubah status aktif: " + err.message);
+    }
+  };
+
+  // Helper: Extract filename from URL
+  const getFilenameFromUrl = (url: string): string => {
+    try {
+      const parsed = new URL(url);
+      const pathname = parsed.pathname;
+      return pathname.substring(pathname.lastIndexOf('/') + 1);
+    } catch {
+      return '';
+    }
+  };
+
+  // Feature 3: Delete release from DB and R2
+  const deleteRelease = async (id: string, downloadUrl: string) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus rilis ini secara permanen?")) {
+      return;
+    }
+
+    const deleteApkFromR2 = window.confirm("Apakah Anda juga ingin menghapus berkas biner APK fisik dari Cloudflare R2?");
+
+    try {
+      // 1. Delete from database
+      const { error } = await supabase
+        .from('application_versions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // 2. Best-effort delete from Cloudflare R2
+      if (deleteApkFromR2 && downloadUrl) {
+        const filename = getFilenameFromUrl(downloadUrl);
+        if (filename) {
+          const workerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL || 'https://arlabs-apk-uploader.ardevlabs.workers.dev/upload';
+          const uploadSecret = import.meta.env.VITE_CLOUDFLARE_UPLOAD_SECRET;
+          
+          const deleteUrl = new URL(workerUrl);
+          deleteUrl.searchParams.set('filename', filename);
+
+          await fetch(deleteUrl.toString(), {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${uploadSecret}`
+            }
+          }).then(res => {
+            if (res.ok) {
+              console.log("Fisik APK berhasil dihapus dari Cloudflare R2.");
+            } else {
+              console.warn("Cloudflare R2 merespons dengan status: " + res.status);
+            }
+          }).catch(err => {
+            console.warn("Gagal menghubungi Cloudflare R2 untuk penghapusan berkas:", err);
+          });
+        }
+      }
+
+      // Update local state
+      setUpdates(prev => prev.filter(upd => upd.id !== id));
+      alert("Rilis berhasil dihapus.");
+    } catch (err: any) {
+      console.error("Gagal menghapus rilis:", err);
+      alert("Gagal menghapus rilis: " + err.message);
+    }
+  };
+
+  // Feature 2: Send FCM update push notifications
+  const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
+    try {
+      const response = await fetch('/api/send-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: notifTitle,
+          body: notifBody,
+          targetTokenOrTopic
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to send notification: ${response.statusText}`);
+      }
+      return true;
+    } catch (err) {
+      console.warn("Gagal mengirimkan push notification FCM:", err);
+      return false;
+    }
+  };
+
+  // Feature 4: Changelog quick tags helper
+  const appendChangelogTag = (tag: string) => {
+    setChangelog(prev => {
+      const bullet = prev ? `\n- ${tag}: ` : `- ${tag}: `;
+      return prev + bullet;
+    });
+  };
+
   // Fetch recent updates
   const fetchUpdates = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('application_versions')
-        .select('id, application_id, version_code, version_name, changelog, download_url, force_update, created_at, applications(package_name)')
+        .select('id, application_id, version_code, version_name, changelog, download_url, force_update, is_active, created_at, applications(package_name)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -328,6 +447,7 @@ export const UpdateManagementScreen: React.FC = () => {
           download_url: item.download_url || '',
           is_force_update: !!item.force_update,
           force_update: !!item.force_update,
+          is_active: item.is_active !== false,
           created_at: item.created_at
         }));
         setUpdates(mappedData);
@@ -429,6 +549,11 @@ export const UpdateManagementScreen: React.FC = () => {
 
       if (error) throw error;
 
+      // Ambil nilai sebelum di-reset untuk push notification
+      const releasedVersionName = versionName;
+      const releasedPackageName = selectedPackage;
+      const releasedAppId = selectedAppId;
+
       // Reset form fields
       setApkUrl('');
       setChangelog('');
@@ -438,6 +563,18 @@ export const UpdateManagementScreen: React.FC = () => {
 
       // Re-fetch latest version info to update suggestion labels
       await fetchLatestVersionInfo(selectedAppId);
+
+      // Kirim Notifikasi Push FCM otomatis ke perangkat client POS yang bersangkutan
+      try {
+        const notifTitle = `Pembaruan Aplikasi Tersedia`;
+        const notifBody = `Versi ${releasedVersionName} (${releasedPackageName}) sudah dirilis. Silakan perbarui aplikasi Anda.`;
+        const topic = `/topics/${releasedAppId}`;
+        
+        console.log(`Broadcasting FCM Release Update: ${notifTitle} to ${topic}`);
+        await sendFcmNotification(notifTitle, notifBody, topic);
+      } catch (fcmErr) {
+        console.warn("Gagal mengirimkan push notification otomatis:", fcmErr);
+      }
 
     } catch (err) {
       console.warn('Failed to insert metadata into application_versions table. Syncing local sandbox state.', err);
@@ -487,11 +624,37 @@ export const UpdateManagementScreen: React.FC = () => {
         </button>
       </section>
 
+      {/* Mobile-Only Segmented Tab Control */}
+      <div className="flex lg:hidden bg-white/85 backdrop-blur-md border border-white/60 p-1.5 rounded-2xl shadow-[4px_4px_10px_rgba(0,0,0,0.05)]">
+        <button
+          type="button"
+          onClick={() => setMobileActiveView('FORM')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all duration-300 cursor-pointer border border-transparent ${
+            mobileActiveView === 'FORM'
+              ? 'bg-[#0EA5E9] text-white shadow-sm'
+              : 'text-[#64748B] hover:text-[#1E293B]'
+          }`}
+        >
+          Publish Update
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileActiveView('HISTORY')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase rounded-xl transition-all duration-300 cursor-pointer border border-transparent ${
+            mobileActiveView === 'HISTORY'
+              ? 'bg-[#0EA5E9] text-white shadow-sm'
+              : 'text-[#64748B] hover:text-[#1E293B]'
+          }`}
+        >
+          History Logs ({updates.length})
+        </button>
+      </div>
+
       {/* 2. Decoupled Form and Logs Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Left Side: Release Deployer Form (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className={`lg:col-span-5 space-y-6 ${mobileActiveView === 'FORM' ? 'block' : 'hidden lg:block'}`}>
           <div className="flex items-center space-x-2 text-[#64748B]">
             <UploadCloud className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Publish New Release</span>
@@ -692,6 +855,37 @@ export const UpdateManagementScreen: React.FC = () => {
                 onChange={(e) => setChangelog(e.target.value)}
                 className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm resize-none"
               />
+              {/* Quick Changelog Tags */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => appendChangelogTag('Fitur Baru')}
+                  className="px-2.5 py-1 text-[8px] font-bold bg-sky-50 hover:bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]/20 rounded-md transition-all uppercase cursor-pointer"
+                >
+                  + Fitur Baru
+                </button>
+                <button
+                  type="button"
+                  onClick={() => appendChangelogTag('Perbaikan Bug')}
+                  className="px-2.5 py-1 text-[8px] font-bold bg-red-55 hover:bg-red-100/10 text-red-500 border border-red-200/40 rounded-md transition-all uppercase cursor-pointer"
+                >
+                  🐞 Bug Fix
+                </button>
+                <button
+                  type="button"
+                  onClick={() => appendChangelogTag('Optimasi Performa')}
+                  className="px-2.5 py-1 text-[8px] font-bold bg-amber-55 hover:bg-amber-100/10 text-amber-600 border border-amber-200/40 rounded-md transition-all uppercase cursor-pointer"
+                >
+                  ⚡ Optimasi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => appendChangelogTag('Keamanan')}
+                  className="px-2.5 py-1 text-[8px] font-bold bg-green-55 hover:bg-green-100/10 text-green-600 border border-green-200/40 rounded-md transition-all uppercase cursor-pointer"
+                >
+                  🔒 Keamanan
+                </button>
+              </div>
             </div>
 
             {/* Update Enforcement Toggle Splitter */}
@@ -756,7 +950,7 @@ export const UpdateManagementScreen: React.FC = () => {
         </div>
 
         {/* Right Side: Update History Logs (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className={`lg:col-span-7 space-y-6 ${mobileActiveView === 'HISTORY' ? 'block' : 'hidden lg:block'}`}>
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-2 text-[#64748B]">
               <Server className="w-4 h-4" />
@@ -867,6 +1061,32 @@ export const UpdateManagementScreen: React.FC = () => {
                       <pre className="text-[10px] text-[#1E293B] font-sans leading-relaxed whitespace-pre-wrap pl-1">
                         {upd.changelog}
                       </pre>
+                    </div>
+
+                    {/* Tombol Kontrol Rollback & Hapus Rilis */}
+                    <div className="flex justify-between items-center pt-3 border-t border-gray-100 mt-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider">Status Distribusi:</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleReleaseActiveState(upd.id, upd.is_active !== false)}
+                          className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all duration-300 cursor-pointer border border-transparent ${
+                            upd.is_active !== false
+                              ? 'bg-green-500 text-white shadow-sm hover:bg-green-600'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {upd.is_active !== false ? '● Aktif' : '○ Nonaktif (Rollback)'}
+                        </button>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => deleteRelease(upd.id, upd.apk_cloudflare_url || upd.download_url || '')}
+                        className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-md text-[9px] font-bold uppercase transition-all duration-200 border border-red-200/40 cursor-pointer"
+                      >
+                        Hapus Rilis
+                      </button>
                     </div>
                   </div>
                 ));
