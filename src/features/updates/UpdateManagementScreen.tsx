@@ -28,14 +28,29 @@ export const UpdateManagementScreen: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [submitLoading, setSubmitLoading] = useState<boolean>(false);
 
+  // UX & simplification states
+  const [latestVersionInfo, setLatestVersionInfo] = useState<string>('Memuat info rilis...');
+  const [activeTab, setActiveTab] = useState<string>('ALL');
+  const [fetchingLatest, setFetchingLatest] = useState<boolean>(false);
+
   // Form states
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [selectedPackage, setSelectedPackage] = useState<string>('');
-  const [versionName, setVersionName] = useState<string>('v1.2.0');
-  const [versionCode, setVersionCode] = useState<number>(12);
+  const [versionName, setVersionName] = useState<string>('v1.0.0');
+  const [versionCode, setVersionCode] = useState<number>(1);
   const [apkUrl, setApkUrl] = useState<string>('');
   const [changelog, setChangelog] = useState<string>('');
   const [isForce, setIsForce] = useState<boolean>(false);
+
+  // Helper to suggest next patch version (e.g. v1.2.3 -> v1.2.4)
+  const suggestNextVersion = (current: string): string => {
+    const match = current.match(/^(v?)(\d+)\.(\d+)\.(\d+)$/i);
+    if (match) {
+      const [_, prefix, major, minor, patch] = match;
+      return `${prefix}${major}.${minor}.${parseInt(patch) + 1}`;
+    }
+    return current;
+  };
 
   // Confirmation Modal
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
@@ -193,6 +208,52 @@ export const UpdateManagementScreen: React.FC = () => {
     }
   };
 
+  // Fetch latest version info for the selected application to auto-suggest version and code
+  const fetchLatestVersionInfo = async (appId: string) => {
+    if (!appId) return;
+    setFetchingLatest(true);
+    setLatestVersionInfo('Memuat versi terakhir...');
+    try {
+      const { data, error } = await supabase
+        .from('application_versions')
+        .select('version_name, version_code')
+        .eq('application_id', appId)
+        .order('version_code', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setLatestVersionInfo(`Terakhir: ${data.version_name} (Code: ${data.version_code})`);
+        setVersionCode(data.version_code + 1);
+        setVersionName(suggestNextVersion(data.version_name));
+      } else {
+        setLatestVersionInfo('Belum ada rilis versi terdaftar');
+        setVersionCode(1);
+        setVersionName('v1.0.0');
+      }
+    } catch (err) {
+      console.warn('Failed to query latest version from DB. Setting fallback suggestions.', err);
+      setLatestVersionInfo('Gagal memuat info versi (Menggunakan fallback)');
+      
+      // If error occurs, read from current local history of updates as fallback
+      const matchingUpdates = updates.filter(u => u.application_id === appId);
+      if (matchingUpdates.length > 0) {
+        const sorted = [...matchingUpdates].sort((a, b) => b.version_code - a.version_code);
+        const latest = sorted[0];
+        setLatestVersionInfo(`Terakhir (Lokal): ${latest.version_name} (Code: ${latest.version_code})`);
+        setVersionCode(latest.version_code + 1);
+        setVersionName(suggestNextVersion(latest.version_name));
+      } else {
+        setVersionCode(1);
+        setVersionName('v1.0.0');
+      }
+    } finally {
+      setFetchingLatest(false);
+    }
+  };
+
   // Fetch recent updates
   const fetchUpdates = async () => {
     setLoading(true);
@@ -258,6 +319,12 @@ export const UpdateManagementScreen: React.FC = () => {
     fetchAppsDropdown();
   }, []);
 
+  useEffect(() => {
+    if (selectedAppId) {
+      fetchLatestVersionInfo(selectedAppId);
+    }
+  }, [selectedAppId]);
+
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setShowConfirmModal(true);
@@ -290,11 +357,11 @@ export const UpdateManagementScreen: React.FC = () => {
       setApkUrl('');
       setChangelog('');
       
-      // Auto-increment recommendations for next release code
-      setVersionCode(prev => prev + 1);
-
       // Re-fetch history
       await fetchUpdates();
+
+      // Re-fetch latest version info to update suggestion labels
+      await fetchLatestVersionInfo(selectedAppId);
 
     } catch (err) {
       console.warn('Failed to insert metadata into application_versions table. Syncing local sandbox state.', err);
@@ -315,9 +382,12 @@ export const UpdateManagementScreen: React.FC = () => {
 
       setUpdates(prev => [simulated, ...prev]);
 
+      setLatestVersionInfo(`Terakhir (Lokal): ${versionName} (Code: ${versionCode})`);
+      setVersionCode(versionCode + 1);
+      setVersionName(suggestNextVersion(versionName));
+
       setApkUrl('');
       setChangelog('');
-      setVersionCode(prev => prev + 1);
     } finally {
       setSubmitLoading(false);
     }
@@ -376,6 +446,16 @@ export const UpdateManagementScreen: React.FC = () => {
                   </option>
                 ))}
               </select>
+              
+              {/* Info Versi Terakhir */}
+              <div className="flex justify-between items-center px-2 py-1 bg-gray-50 border border-gray-100 rounded-md">
+                <span className="text-[8px] text-gray-400 font-bold uppercase tracking-wider">Status Versi Terakhir:</span>
+                <span className={`text-[9px] font-black font-mono ${
+                  fetchingLatest ? 'text-[#0EA5E9] animate-pulse' : 'text-gray-600'
+                }`}>
+                  {latestVersionInfo}
+                </span>
+              </div>
             </div>
 
             {/* Cloudflare CDN Url with File Uploader */}
@@ -590,9 +670,48 @@ export const UpdateManagementScreen: React.FC = () => {
 
         {/* Right Side: Update History Logs (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="flex items-center space-x-2 text-[#64748B]">
-            <Server className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Release Deployment History</span>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2 text-[#64748B]">
+              <Server className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase tracking-wider">Release Deployment History</span>
+            </div>
+            <span className="text-[10px] text-gray-400 font-bold font-mono">
+              Filter: {activeTab === 'ALL' ? 'Semua Aplikasi' : activeTab}
+            </span>
+          </div>
+
+          {/* App Tab Filters */}
+          <div className="flex flex-wrap gap-2 pb-1 border-b border-gray-100">
+            <button
+              onClick={() => setActiveTab('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all duration-200 border border-transparent ${
+                activeTab === 'ALL'
+                  ? 'bg-[#0EA5E9] text-white shadow-sm'
+                  : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Semua
+            </button>
+            {apps.map((app) => (
+              <button
+                key={app.id}
+                onClick={() => setActiveTab(app.package_name)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-200 flex items-center space-x-1.5 border border-transparent ${
+                  activeTab === app.package_name
+                    ? 'bg-[#0EA5E9] text-white shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                <span>{app.app_name}</span>
+                <span className={`text-[8px] font-mono rounded px-1 py-0.25 ${
+                  activeTab === app.package_name 
+                    ? 'bg-white/20 text-white' 
+                    : 'bg-gray-100 text-gray-400'
+                }`}>
+                  {app.package_name}
+                </span>
+              </button>
+            ))}
           </div>
 
           {loading ? (
@@ -606,55 +725,65 @@ export const UpdateManagementScreen: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {updates.map((upd) => (
-                <div
-                  key={upd.id}
-                  className="bg-white/80 border border-white/60 shadow-[4px_4px_8px_#d1d5db,-4px_-4px_8px_#ffffff] hover:shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] transition-all duration-300 p-6 rounded-[20px] space-y-4"
-                >
-                  <div className="flex justify-between items-center pb-2.5 border-b border-gray-100">
-                    <div className="flex items-center space-x-2.5">
-                      <span className="text-sm font-black text-[#1E293B]">{upd.version_name}</span>
-                      <span className="text-[10px] bg-gray-100 text-gray-500 border border-gray-200 rounded px-2 py-0.5 font-mono">
-                        Code: {upd.version_code}
-                      </span>
-                      {upd.package_name && (
-                        <span className="text-[9px] text-[#0EA5E9] font-mono border border-[#0EA5E9]/20 bg-[#0EA5E9]/5 rounded px-2 py-0.5">
-                          {upd.package_name}
+              {(() => {
+                const filtered = updates.filter(upd => activeTab === 'ALL' || upd.package_name === activeTab);
+                if (filtered.length === 0) {
+                  return (
+                    <div className="bg-white/80 border border-white/60 p-12 rounded-[24px] text-center text-[#64748B] shadow-sm uppercase font-bold text-xs tracking-wider">
+                      Belum ada versi dirilis untuk aplikasi ini
+                    </div>
+                  );
+                }
+                return filtered.map((upd) => (
+                  <div
+                    key={upd.id}
+                    className="bg-white/80 border border-white/60 shadow-[4px_4px_8px_#d1d5db,-4px_-4px_8px_#ffffff] hover:shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] transition-all duration-300 p-6 rounded-[20px] space-y-4"
+                  >
+                    <div className="flex justify-between items-center pb-2.5 border-b border-gray-100">
+                      <div className="flex items-center space-x-2.5">
+                        <span className="text-sm font-black text-[#1E293B]">{upd.version_name}</span>
+                        <span className="text-[10px] bg-gray-100 text-gray-500 border border-gray-200 rounded px-2 py-0.5 font-mono">
+                          Code: {upd.version_code}
                         </span>
-                      )}
+                        {upd.package_name && (
+                          <span className="text-[9px] text-[#0EA5E9] font-mono border border-[#0EA5E9]/20 bg-[#0EA5E9]/5 rounded px-2 py-0.5">
+                            {upd.package_name}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-2 text-[9px] font-bold">
+                        <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-[#64748B]">{new Date(upd.created_at).toLocaleDateString()}</span>
+                        
+                        <span className={`px-2 py-0.5 rounded ml-2 uppercase text-[8px] ${
+                          upd.is_force_update 
+                            ? 'bg-red-50 text-red-600 border border-red-100' 
+                            : 'bg-sky-50 text-[#0EA5E9] border border-sky-100'
+                        }`}>
+                          {upd.is_force_update ? 'Force' : 'Optional'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center space-x-2 text-[9px] font-bold">
-                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-[#64748B]">{new Date(upd.created_at).toLocaleDateString()}</span>
-                      
-                      <span className={`px-2 py-0.5 rounded ml-2 uppercase text-[8px] ${
-                        upd.is_force_update 
-                          ? 'bg-red-50 text-red-600 border border-red-100' 
-                          : 'bg-sky-50 text-[#0EA5E9] border border-sky-100'
-                      }`}>
-                        {upd.is_force_update ? 'Force' : 'Optional'}
+                    {/* CDN APK Link */}
+                    <div className="bg-gray-50 border border-gray-100 p-2.5 rounded-lg text-[9px] font-mono text-gray-500 break-all select-all shadow-inner">
+                      URL: {upd.apk_cloudflare_url}
+                    </div>
+
+                    {/* Changelog Notes */}
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-[#64748B] uppercase flex items-center space-x-1">
+                        <FileText className="w-3.5 h-3.5 mr-1" />
+                        Changelog notes
                       </span>
+                      <pre className="text-[10px] text-[#1E293B] font-sans leading-relaxed whitespace-pre-wrap pl-1">
+                        {upd.changelog}
+                      </pre>
                     </div>
                   </div>
-
-                  {/* CDN APK Link */}
-                  <div className="bg-gray-50 border border-gray-100 p-2.5 rounded-lg text-[9px] font-mono text-gray-500 break-all select-all shadow-inner">
-                    URL: {upd.apk_cloudflare_url}
-                  </div>
-
-                  {/* Changelog Notes */}
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-bold text-[#64748B] uppercase flex items-center space-x-1">
-                      <FileText className="w-3.5 h-3.5 mr-1" />
-                      Changelog notes
-                    </span>
-                    <pre className="text-[10px] text-[#1E293B] font-sans leading-relaxed whitespace-pre-wrap pl-1">
-                      {upd.changelog}
-                    </pre>
-                  </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           )}
         </div>
