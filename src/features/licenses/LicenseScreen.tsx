@@ -11,6 +11,7 @@ interface License {
   status: 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'PENDING';
   associated_device: string | null;
   customer_id?: string | null;
+  application_id?: string | null;
   created_at: string;
   activated_at?: string | null;
   expires_at?: string | null;
@@ -23,12 +24,15 @@ interface License {
     whatsapp: string;
     phone?: string | null;
   } | null;
+  applications?: {
+    id: string;
+    app_name: string;
+    package_name: string;
+    download_url?: string | null;
+  } | null;
 }
 
-const buildCustomerTemplate = (licenseKey: string, downloadUrl: string, isEarlyAccess: boolean, licenseType: string, durationDays: number | null) => {
-  const productText = isEarlyAccess ? 'ArLABS POS Early Access' : 'ArLABS POS';
-  const userRoleText = isEarlyAccess ? 'pengguna Early Access' : 'pengguna';
-  
+const buildCustomerTemplate = (licenseKey: string, downloadUrl: string, appName: string, licenseType: string, durationDays: number | null) => {
   let durationText = 'Lifetime License';
   if (licenseType === 'TRIAL') {
     durationText = `Trial License (${durationDays || 7} Hari)`;
@@ -38,15 +42,15 @@ const buildCustomerTemplate = (licenseKey: string, downloadUrl: string, isEarlyA
 
   return `Halo 👋
 
-Terima kasih telah membeli ${productText}.
+Terima kasih telah membeli ${appName || 'aplikasi kami'}.
 
 Berikut data lisensi Anda:
 
 🔑 License Key
 ${licenseKey}
 
-📥 Link Download APK
-${downloadUrl}
+📥 Link Download Aplikasi
+${downloadUrl || '-'}
 
 Cara Aktivasi
 1. Install APK.
@@ -62,7 +66,7 @@ Penting
 • Simpan License Key dengan baik.
 • Aktivasi pertama membutuhkan koneksi internet.
 
-Sebagai ${userRoleText} Anda mendapatkan:
+Sebagai pengguna Anda mendapatkan:
 • ${durationText}
 • Gratis seluruh pembaruan dan perbaikan
 • Prioritas fitur berdasarkan masukan pengguna
@@ -70,7 +74,7 @@ Sebagai ${userRoleText} Anda mendapatkan:
 Apabila mengalami kendala,
 gunakan menu Laporkan Masalah di dalam aplikasi.
 
-Terima kasih telah mempercayai ArLABS POS.`;
+Terima kasih telah mempercayai ${appName || 'aplikasi kami'}.`;
 };
 
 export const LicenseScreen: React.FC = () => {
@@ -92,11 +96,22 @@ export const LicenseScreen: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   
   // Generator State
-  const [generationMode, setGenerationMode] = useState<'EARLY_ACCESS' | 'RELEASE' | 'RE_GENERATE'>('EARLY_ACCESS');
+  const [generationMode, setGenerationMode] = useState<'RELEASE' | 'RE_GENERATE'>('RELEASE');
   const [latestDownloadUrl, setLatestDownloadUrl] = useState<string>('https://link.arlabs.io/download-apk');
   const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
   const [showDetailedSuccess, setShowDetailedSuccess] = useState<boolean>(false);
   const [generatedTemplate, setGeneratedTemplate] = useState<string>('');
+
+  // Target Applications State
+  interface AppOption {
+    id: string;
+    app_name: string;
+    package_name: string;
+    download_url?: string;
+  }
+  const [appsList, setAppsList] = useState<AppOption[]>([]);
+  const [selectedAppId, setSelectedAppId] = useState<string>('');
+  const [appsLoading, setAppsLoading] = useState<boolean>(false);
 
   // License Duration System State
   const [selectedLicenseType, setSelectedLicenseType] = useState<string>('LIFETIME');
@@ -175,12 +190,33 @@ export const LicenseScreen: React.FC = () => {
     }
   };
 
+  // Fetch applications list from Supabase
+  const fetchAppsList = async () => {
+    setAppsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id, app_name, package_name, download_url')
+        .order('app_name', { ascending: true });
+      if (!error && data) {
+        setAppsList(data);
+        if (data.length > 0) {
+          setSelectedAppId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch applications list:', err);
+    } finally {
+      setAppsLoading(false);
+    }
+  };
+
   // Fetch licenses
   const fetchLicenses = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('licenses')
-      .select('*, customers(id, name, email, whatsapp, phone)')
+      .select('*, customers(id, name, email, whatsapp, phone), applications(id, app_name, package_name, download_url)')
       .order('created_at', { ascending: false });
     if (!error && data) setLicenses(data);
     setLoading(false);
@@ -189,6 +225,7 @@ export const LicenseScreen: React.FC = () => {
   useEffect(() => {
     fetchLicenses();
     fetchLatestDownloadUrl();
+    fetchAppsList();
   }, []);
 
   // Suspend License Status
@@ -311,21 +348,37 @@ export const LicenseScreen: React.FC = () => {
     setFormLoading(true);
 
     try {
-      let apkUrl = latestDownloadUrl;
-      try {
-        const { data, error } = await supabase
-          .from('application_versions')
-          .select('download_url')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(1);
+      const selectedApp = appsList.find(app => app.id === selectedAppId);
+      const appName = selectedApp ? selectedApp.app_name : 'Aplikasi Kami';
+      let apkUrl = selectedApp?.download_url || latestDownloadUrl;
 
-        if (!error && data && data.length > 0) {
-          apkUrl = data[0].download_url;
-          setLatestDownloadUrl(apkUrl);
+      if (selectedAppId) {
+        try {
+          const { data, error } = await supabase
+            .from('application_versions')
+            .select('download_url')
+            .eq('application_id', selectedAppId)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (!error && data && data.length > 0) {
+            apkUrl = data[0].download_url;
+          } else {
+            // Check if there is any version at all for this app
+            const { data: anyVerData, error: anyVerError } = await supabase
+              .from('application_versions')
+              .select('download_url')
+              .eq('application_id', selectedAppId)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (!anyVerError && anyVerData && anyVerData.length > 0) {
+              apkUrl = anyVerData[0].download_url;
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to fetch latest APK download URL for selected application on submit:', err);
         }
-      } catch (err) {
-        console.warn('Failed to fetch latest APK download URL on submit:', err);
       }
 
       // Step A: Insert Customer
@@ -377,6 +430,7 @@ export const LicenseScreen: React.FC = () => {
           duration_days: finalDurationDays,
           status: 'PENDING',
           associated_device: 'UNBOUND',
+          application_id: selectedAppId || null,
           created_at: new Date().toISOString()
         }]);
 
@@ -392,7 +446,7 @@ export const LicenseScreen: React.FC = () => {
       if (generationMode === 'RE_GENERATE') {
         setShowDetailedSuccess(false);
       } else {
-        const template = buildCustomerTemplate(generatedKey, apkUrl, generationMode === 'EARLY_ACCESS', finalType, finalDurationDays);
+        const template = buildCustomerTemplate(generatedKey, apkUrl, appName, finalType, finalDurationDays);
         setGeneratedTemplate(template);
         setShowDetailedSuccess(true);
         setCopiedTemplate(false);
@@ -402,6 +456,9 @@ export const LicenseScreen: React.FC = () => {
       setCustomerEmail('');
       setCustomerWhatsapp('');
       setCustomerEcommerce('');
+      if (appsList.length > 0) {
+        setSelectedAppId(appsList[0].id);
+      }
       setShowModal(false);
 
       await fetchLicenses();
@@ -584,6 +641,7 @@ export const LicenseScreen: React.FC = () => {
               <tr>
                 <th className="py-4 px-6">LICENSE_KEY</th>
                 <th className="py-4 px-6">CUSTOMER / ECOMMERCE</th>
+                <th className="py-4 px-6">PACKAGE</th>
                 <th className="py-4 px-6">TYPE / DURATION</th>
                 <th className="py-4 px-6">EXPIRES / REMAINING</th>
                 <th className="py-4 px-6">STATUS</th>
@@ -594,7 +652,7 @@ export const LicenseScreen: React.FC = () => {
             <tbody className="divide-y divide-gray-100 text-[#1E293B]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#64748B]">
+                  <td colSpan={8} className="py-12 text-center text-[#64748B]">
                     <div className="flex items-center justify-center space-x-2">
                       <Loader2 className="w-4 h-4 animate-spin text-[#0EA5E9]" />
                       <span>FETCHING_LIVE_STREAM...</span>
@@ -603,7 +661,7 @@ export const LicenseScreen: React.FC = () => {
                 </tr>
               ) : filteredLicenses.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
+                  <td colSpan={8} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
                     NO DATA IN DATABASE
                   </td>
                 </tr>
@@ -632,6 +690,18 @@ export const LicenseScreen: React.FC = () => {
                           <div className="flex flex-col">
                             <span className="font-bold text-[#1E293B]">{lic.customers.name}</span>
                             <span className="text-[10px] text-sky-600 font-semibold uppercase">{lic.customers.phone || 'No Ecommerce'}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 font-semibold">-</span>
+                        )}
+                      </td>
+
+                      {/* Package */}
+                      <td className="py-4 px-6">
+                        {lic.applications ? (
+                          <div className="flex flex-col">
+                            <span className="font-bold text-[#1E293B]">{lic.applications.app_name}</span>
+                            <span className="text-[10px] text-gray-500 font-mono">{lic.applications.package_name}</span>
                           </div>
                         ) : (
                           <span className="text-gray-400 font-semibold">-</span>
@@ -786,6 +856,17 @@ export const LicenseScreen: React.FC = () => {
                     )}
                   </div>
                   <div>
+                    <span className="block font-semibold text-[8px] text-gray-400 uppercase">Package</span>
+                    <span className="font-bold text-[#1E293B] block truncate max-w-[120px]">
+                      {lic.applications ? lic.applications.app_name : '-'}
+                    </span>
+                    {lic.applications && (
+                      <span className="text-[8px] text-gray-500 font-mono block truncate max-w-[120px]">
+                        {lic.applications.package_name}
+                      </span>
+                    )}
+                  </div>
+                  <div>
                     <span className="block font-semibold text-[8px] text-gray-400 uppercase">Device</span>
                     <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">
                       {lic.associated_device || 'UNBOUND'}
@@ -798,7 +879,7 @@ export const LicenseScreen: React.FC = () => {
                       <span className="text-[9px] text-[#64748B] font-semibold block">{lic.duration_days} Days</span>
                     )}
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <span className="block font-semibold text-[8px] text-gray-400 uppercase">Expiration / Remaining</span>
                     <span className="text-[#1E293B] font-bold block">{getExpirationText(lic)}</span>
                     <span className={`text-[9.5px] font-bold block ${remDaysText === 'Expired' ? 'text-red-500' : 'text-[#64748B]'}`}>{remDaysText}</span>
@@ -882,18 +963,7 @@ export const LicenseScreen: React.FC = () => {
                 <label className="block text-[#64748B] uppercase font-bold tracking-widest text-[9px]">
                   Generate Option
                 </label>
-                <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setGenerationMode('EARLY_ACCESS')}
-                    className={`py-1.5 rounded-lg text-center font-bold text-[9px] uppercase transition-all duration-200 border-none ${
-                      generationMode === 'EARLY_ACCESS'
-                        ? 'bg-white text-[#0EA5E9] shadow-sm'
-                        : 'text-[#64748B] hover:text-[#1E293B] bg-transparent'
-                    }`}
-                  >
-                    Early Access
-                  </button>
+                <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl">
                   <button
                     type="button"
                     onClick={() => setGenerationMode('RELEASE')}
@@ -917,6 +987,35 @@ export const LicenseScreen: React.FC = () => {
                     Re-Gen
                   </button>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[#64748B] uppercase font-bold tracking-widest text-[9px]">
+                  Target Aplikasi (Package)
+                </label>
+                {appsLoading ? (
+                  <div className="flex items-center space-x-2 py-2 text-gray-500 font-semibold">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0EA5E9]" />
+                    <span>Memuat daftar aplikasi...</span>
+                  </div>
+                ) : appsList.length === 0 ? (
+                  <div className="bg-red-50 text-red-600 border border-red-200 p-2.5 rounded-lg font-bold text-center">
+                    Aplikasi belum terdaftar di admin panel. Silakan tambahkan aplikasi terlebih dahulu.
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={selectedAppId}
+                    onChange={(e) => setSelectedAppId(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer"
+                  >
+                    {appsList.map((app) => (
+                      <option key={app.id} value={app.id}>
+                        {app.app_name} ({app.package_name})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -1021,8 +1120,12 @@ export const LicenseScreen: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={formLoading}
-                  className="bg-[#0EA5E9] hover:bg-[#0ea5e9]/90 text-white px-5 py-2 rounded-lg transition-all duration-300 font-bold uppercase shadow-sm flex items-center space-x-1 border-none"
+                  disabled={formLoading || appsList.length === 0}
+                  className={`px-5 py-2 rounded-lg transition-all duration-300 font-bold uppercase shadow-sm flex items-center space-x-1 border-none ${
+                    appsList.length === 0
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-[#0EA5E9] hover:bg-[#0ea5e9]/90 text-white'
+                  }`}
                 >
                   {formLoading ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1081,6 +1184,15 @@ export const LicenseScreen: React.FC = () => {
                     </div>
                   )}
                   
+                  <div>
+                    <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Package / Application</label>
+                    <span className="text-xs font-bold text-[#1E293B] block">
+                      {selectedLicense.applications 
+                        ? `${selectedLicense.applications.app_name} (${selectedLicense.applications.package_name})` 
+                        : '-'}
+                    </span>
+                  </div>
+
                   <div className="border-t border-gray-200/60 pt-3 mt-3 space-y-2">
                     <div>
                       <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">License Key</label>

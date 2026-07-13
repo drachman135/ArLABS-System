@@ -54,6 +54,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
 
+  // Exit Dialog State
+  const [showExitModal, setShowExitModal] = useState<boolean>(false);
+
   // Action Sheet Animation States
   const [openDropdown, setOpenDropdown] = useState<'stats' | 'reports' | 'registry' | 'distribution' | 'broadcast' | null>(null);
   const [isAnimatingOut, setIsAnimatingOut] = useState<boolean>(false);
@@ -80,6 +83,46 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     };
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  // Refs for tracking activeView and showExitModal inside the event listener to avoid stale closure
+  const activeViewRef = useRef(activeView);
+  useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
+
+  const showExitModalRef = useRef(showExitModal);
+  useEffect(() => {
+    showExitModalRef.current = showExitModal;
+  }, [showExitModal]);
+
+  useEffect(() => {
+    let listener: any = null;
+
+    const setupBackButton = async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+        listener = await App.addListener('backButton', () => {
+          if (showExitModalRef.current) {
+            setShowExitModal(false);
+          } else if (activeViewRef.current !== 'dashboard') {
+            setActiveView('dashboard');
+          } else {
+            setShowExitModal(true);
+          }
+        });
+      } catch (err) {
+        console.warn('Capacitor App plugin not available on this platform.', err);
+      }
+    };
+
+    setupBackButton();
+
+    return () => {
+      if (listener) {
+        listener.remove();
+      }
+    };
   }, []);
 
   const handleDockNavigation = (tabName: 'dashboard' | 'stats' | 'reports' | 'registry' | 'distribution' | 'broadcast') => {
@@ -650,6 +693,42 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           );
         })}
       </div>
+
+      {/* --- EXIT CONFIRMATION DIALOG (Glassmorphism) --- */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-[zoomInSoft_0.2s_ease-out]">
+          <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.15)] p-6 max-w-sm w-full rounded-[24px] text-center space-y-6">
+            <div className="flex flex-col items-center space-y-2">
+              <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center shadow-inner">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider pt-2">
+                Keluar Aplikasi?
+              </h4>
+            </div>
+            <p className="text-xs text-[#64748B] leading-relaxed">
+              Apakah Anda yakin ingin keluar dari aplikasi ArLABS Admin?
+            </p>
+            <div className="flex space-x-3 pt-2">
+              <button
+                onClick={() => setShowExitModal(false)}
+                className="flex-1 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-sm uppercase"
+              >
+                [ Batal ]
+              </button>
+              <button
+                onClick={async () => {
+                  const { App } = await import('@capacitor/app');
+                  await App.exitApp();
+                }}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md uppercase"
+              >
+                [ Keluar ]
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- CSS INJECTIONS FOR NEUMORPHISM 2.0 SHADOWS & OVERRIDES --- */}
       <style>{`
