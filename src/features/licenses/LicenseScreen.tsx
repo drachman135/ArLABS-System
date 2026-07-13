@@ -196,7 +196,7 @@ export const LicenseScreen: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('applications')
-        .select('id, app_name, package_name, download_url')
+        .select('id, app_name, package_name')
         .order('app_name', { ascending: true });
       if (!error && data) {
         setAppsList(data);
@@ -216,7 +216,7 @@ export const LicenseScreen: React.FC = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('licenses')
-      .select('*, customers(id, name, email, whatsapp, phone), applications(id, app_name, package_name, download_url)')
+      .select('*, customers(id, name, email, whatsapp, phone), applications(id, app_name, package_name)')
       .order('created_at', { ascending: false });
     if (!error && data) setLicenses(data);
     setLoading(false);
