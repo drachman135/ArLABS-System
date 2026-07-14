@@ -31,7 +31,10 @@ import {
   LogOut,
   ChevronUp,
   Smartphone,
-  Activity
+  Activity,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -40,20 +43,19 @@ interface DashboardScreenProps {
   onLogout: () => void;
 }
 
-interface LogEntry {
-  id: string;
-  action: string;
-  description: string;
-  severity: 'info' | 'warning' | 'critical';
-  created_at: string;
-}
-
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
   const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
+
+  // App cards dashboard state
+  const [apps, setApps] = useState<any[]>([]);
+  const [licensesList, setLicensesList] = useState<any[]>([]);
+  const [devicesList, setDevicesList] = useState<any[]>([]);
+  const [selectedAppForModal, setSelectedAppForModal] = useState<any | null>(null);
+  const [isAppModalOpen, setIsAppModalOpen] = useState<boolean>(false);
+  const [copiedAppId, setCopiedAppId] = useState<string | null>(null);
 
   // Exit Dialog State
   const [showExitModal, setShowExitModal] = useState<boolean>(false);
@@ -173,16 +175,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     expiredLicenses: 0
   });
 
-  const activationHistory = [
-    { day: 'MON', count: 12 },
-    { day: 'TUE', count: 19 },
-    { day: 'WED', count: 15 },
-    { day: 'THU', count: 28 },
-    { day: 'FRI', count: 22 },
-    { day: 'SAT', count: 32 },
-    { day: 'SUN', count: 30 }
-  ];
-
   useEffect(() => {
     const updateTime = () => {
       const date = new Date();
@@ -277,9 +269,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const start = performance.now();
       const { error: pingError } = await supabase.from('admins').select('id').limit(1);
-      const end = performance.now();
       if (pingError) throw pingError;
       setConnected(true);
 
@@ -293,21 +283,51 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         expiredLicenses: expiredLicCount || 0
       });
 
-      const { data: logData, error: logError } = await supabase.from('logs').select('id, action, description, severity, created_at').order('created_at', { ascending: false }).limit(6);
-      if (!logError && logData && logData.length > 0) {
-        setLogs(logData.map(l => ({
-          id: l.id, action: l.action, description: l.description, severity: l.severity as 'info' | 'warning' | 'critical',
-          created_at: new Date(l.created_at).toLocaleTimeString('en-US', { hour12: false })
-        })));
-      } else {
-        setLogs([
-          { id: '1', action: 'SYS_SYNC', description: `System verified in ${Math.round(end - start)}ms`, severity: 'info', created_at: new Date().toLocaleTimeString('en-US', { hour12: false }) },
-          { id: '2', action: 'AUTH_OK', description: `Welcome back, ${profile?.name || 'Administrator'}`, severity: 'info', created_at: new Date(Date.now() - 3000).toLocaleTimeString('en-US', { hour12: false }) }
-        ]);
+      // Fetch Applications
+      const { data: appsData, error: appsError } = await supabase
+        .from('applications')
+        .select('*')
+        .order('app_name', { ascending: true });
+
+      let loadedApps = appsData || [];
+      if (appsError || !appsData || appsData.length === 0) {
+        loadedApps = [
+          { 
+            id: 'app-1', 
+            app_name: 'ArLABS Android Client', 
+            package_name: 'com.arlabs.client', 
+            current_version: '1.0.4', 
+            min_supported_version: '1.0.0', 
+            status: 'ACTIVE', 
+            force_update_required: false, 
+            download_url: 'https://cdn.arlabs.io/apk/release-v1.0.4.apk',
+            release_notes: 'Initial production build deployment with offline caching services and key validations.',
+            updated_at: new Date().toISOString() 
+          },
+          { 
+            id: 'app-2', 
+            app_name: 'ArLABS POS Companion', 
+            package_name: 'com.arlabs.pos', 
+            current_version: '2.1.0', 
+            min_supported_version: '2.0.0', 
+            status: 'MAINTENANCE', 
+            force_update_required: true, 
+            download_url: 'https://cdn.arlabs.io/apk/release-v2.1.0.apk',
+            release_notes: 'Scheduled database indexing and multi-tenant RLS hardening updates.',
+            updated_at: new Date(Date.now() - 86400000).toISOString() 
+          }
+        ];
       }
+      setApps(loadedApps);
+
+      // Fetch raw data lists for client-side aggregation
+      const { data: licensesData } = await supabase.from('licenses').select('id, application_id, status');
+      setLicensesList(licensesData || []);
+
+      const { data: devicesData } = await supabase.from('devices').select('id, license_id');
+      setDevicesList(devicesData || []);
     } catch (err: any) {
       setConnected(false);
-      setLogs([{ id: 'err-1', action: 'OFFLINE', description: 'Failed to sync with database.', severity: 'critical', created_at: new Date().toLocaleTimeString('en-US', { hour12: false }) }]);
     } finally {
       setLoading(false);
     }
@@ -478,158 +498,156 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       {/* --- MAIN DASHBOARD WORKSPACE --- */}
       <div className="px-4 md:px-6 lg:px-8 max-w-[1400px] mx-auto relative z-10">
         {activeView === 'dashboard' ? (
-          <div className="space-y-8">
-
-            {/* 1. SOFT QUICK ACTIONS */}
-            <div className="grid grid-cols-3 gap-4 md:gap-8">
-              {[
-                { label: 'Lisensi baru', icon: Plus, view: 'licenses', color: 'text-[#8B5CF6]' },
-                { label: 'Laporan', icon: AlertTriangle, view: 'feedback', color: 'text-[#F43F5E]' },
-                { label: 'Pembaharuan', icon: UploadCloud, view: 'updates', color: 'text-[#10B981]' }
-              ].map((btn, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleActionClick(btn.view)}
-                  className={`bg-[#E6E9EF] rounded-[2rem] p-5 flex flex-col items-center justify-center space-y-4 transition-all neu-flat hover:neu-pressed group`}
-                >
-                  <div className={`w-12 h-12 flex items-center justify-center rounded-full neu-convex group-hover:scale-95 transition-transform ${btn.color}`}>
-                    <btn.icon className="w-6 h-6" />
-                  </div>
-                  <span className="text-[10px] md:text-xs font-black text-[#718096] group-hover:text-[#4A5568] uppercase tracking-widest text-center">
-                    {btn.label}
-                  </span>
-                </button>
-              ))}
+          <div className="space-y-6">
+            
+            {/* Header / Summary Section */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-[#2D3748] font-black text-xl tracking-tight uppercase">Dashboard Utama</h2>
+                <p className="text-xs text-[#718096] font-bold">Ringkasan status aplikasi dan statistik penggunaan platform</p>
+              </div>
+              <button 
+                onClick={fetchDashboardData} 
+                disabled={loading}
+                className="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-blue-500 bg-[#E6E9EF] neu-flat hover:neu-pressed disabled:opacity-50 transition-all flex items-center space-x-2 self-end sm:self-auto"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span>Segarkan data</span>
+              </button>
             </div>
 
-            <main className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Quick Summary Cards (Responsive Row) */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat flex flex-col justify-center">
+                <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase mb-1">Aplikasi</span>
+                <span className="text-xl md:text-2xl font-black text-[#2D3748]">{loading ? '...' : apps.length}</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat flex flex-col justify-center">
+                <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase mb-1">Lisensi Aktif</span>
+                <span className="text-xl md:text-2xl font-black text-blue-500">{loading ? '...' : metrics.activeLicenses}</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat flex flex-col justify-center">
+                <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase mb-1">Perangkat</span>
+                <span className="text-xl md:text-2xl font-black text-emerald-500">{loading ? '...' : metrics.activeDevices}</span>
+              </div>
+            </div>
 
-              {/* BLOCK 1: Smooth Area Chart */}
-              <section className="col-span-1 lg:col-span-8 bg-[#E6E9EF] p-6 md:p-8 rounded-[2.5rem] neu-flat flex flex-col">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-lg font-black text-[#2D3748] tracking-tight">Onboarding Trends</h3>
-                    <span className="tracking-widest text-[10px] font-bold text-[#A0AEC0] uppercase">7-Day Rolling Activations</span>
-                  </div>
-                  <button
-                    onClick={fetchDashboardData}
-                    disabled={loading}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-[#3B82F6] neu-flat hover:neu-pressed disabled:opacity-50 transition-all"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  </button>
+            {/* Applications Grid: Optimized for Mobile & Desktop */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center px-1">
+                <span className="text-[10px] font-black text-[#4A5568] uppercase tracking-widest">Aplikasi Terdaftar ({apps.length})</span>
+                <button 
+                  onClick={() => handleActionClick('applications')}
+                  className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-[#718096] bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all flex items-center space-x-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Tambah Aplikasi</span>
+                </button>
+              </div>
+
+              {loading && apps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-[#718096] bg-[#E6E9EF] rounded-[2.5rem] neu-inset h-64 space-y-3">
+                  <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+                  <span className="text-xs font-black tracking-widest uppercase">Memuat data aplikasi...</span>
                 </div>
-
-                <div className="w-full h-64 neu-inset rounded-[2rem] p-4 relative flex items-end justify-center overflow-hidden">
-                  {loading ? (
-                    <div className="flex flex-col items-center justify-center space-y-3 text-[#718096] h-full">
-                      <RefreshCw className="w-6 h-6 animate-spin text-[#3B82F6]" />
-                      <span className="text-xs font-bold tracking-widest uppercase">Syncing...</span>
-                    </div>
-                  ) : (
-                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 500 130" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.2" />
-                          <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-                      {/* Soft Grid Lines */}
-                      <line x1="0" y1="32" x2="500" y2="32" stroke="#CBD5E1" strokeWidth="1" strokeDasharray="4,4" />
-                      <line x1="0" y1="65" x2="500" y2="65" stroke="#CBD5E1" strokeWidth="1" strokeDasharray="4,4" />
-                      <line x1="0" y1="98" x2="500" y2="98" stroke="#CBD5E1" strokeWidth="1" strokeDasharray="4,4" />
-
-                      {/* Smooth Area */}
-                      <path d="M 0 130 L 0 95 C 40 95 60 75 83 75 C 120 75 140 85 166 85 C 200 85 220 45 249 45 C 280 45 300 65 332 65 C 370 65 390 25 415 25 C 450 25 470 30 500 30 L 500 130 Z" fill="url(#blueGradient)" />
-
-                      {/* Smooth Line */}
-                      <path d="M 0 95 C 40 95 60 75 83 75 C 120 75 140 85 166 85 C 200 85 220 45 249 45 C 280 45 300 65 332 65 C 370 65 390 25 415 25 C 450 25 470 30 500 30" fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" />
-
-                      {/* Touchable Dots */}
-                      {[{ x: 83, y: 75 }, { x: 166, y: 85 }, { x: 249, y: 45 }, { x: 332, y: 65 }, { x: 415, y: 25 }].map((pt, i) => (
-                        <circle key={i} cx={pt.x} cy={pt.y} r="5" fill="#E6E9EF" stroke="#3B82F6" strokeWidth="3" className="shadow-lg" />
-                      ))}
-                    </svg>
-                  )}
-                  {!loading && (
-                    <div className="absolute inset-0 flex justify-between px-6 pt-6 pointer-events-none">
-                      {activationHistory.map((h, i) => (
-                        <div key={i} className="flex flex-col justify-between h-full items-center text-[10px] text-[#A0AEC0] font-black">
-                          <span className="text-[#3B82F6] opacity-0">{h.count}</span>
-                          <span className="mt-auto pt-2">{h.day}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              ) : apps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-[#718096] bg-[#E6E9EF] rounded-[2.5rem] neu-inset h-64 space-y-2">
+                  <Smartphone className="w-10 h-10 text-[#A0AEC0]" />
+                  <span className="text-xs font-black tracking-widest uppercase">Belum ada aplikasi terdaftar</span>
                 </div>
-              </section>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {apps.map(app => {
+                    const appLicenses = licensesList.filter(l => l.application_id === app.id);
+                    const totalLics = appLicenses.length;
+                    const activeLics = appLicenses.filter(l => l.status === 'ACTIVE').length;
+                    
+                    const appLicenseIds = new Set(appLicenses.map(l => l.id));
+                    const appDevicesCount = devicesList.filter(d => d.license_id && appLicenseIds.has(d.license_id)).length;
 
-              {/* BLOCK 2: Physical Counter Metrics */}
-              <section className="col-span-1 lg:col-span-4 flex flex-col justify-between space-y-6">
-
-                {/* Metric 1 */}
-                <div className="bg-[#E6E9EF] p-6 rounded-[2rem] neu-flat flex flex-col justify-center relative overflow-hidden flex-1">
-                  <div className="absolute right-4 top-4 w-10 h-10 rounded-full neu-inset flex items-center justify-center">
-                    <Key className="w-4 h-4 text-[#8B5CF6]" />
-                  </div>
-                  <span className="text-[10px] text-[#718096] font-black tracking-widest uppercase mb-2">Active Licenses</span>
-                  <div className="neu-inset p-3 rounded-2xl inline-flex self-start">
-                    <span className="text-3xl md:text-4xl font-black text-[#2D3748] tracking-tight">{loading ? '--' : metrics.activeLicenses}</span>
-                  </div>
-                </div>
-
-                {/* Metric 2 & 3 in a row or stacked */}
-                <div className="flex gap-6 flex-1">
-                  <div className="bg-[#E6E9EF] p-5 rounded-[2rem] neu-flat flex-1 flex flex-col justify-between">
-                    <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase">Devices</span>
-                    <span className="text-2xl font-black text-[#10B981]">{loading ? '-' : metrics.activeDevices}</span>
-                  </div>
-
-                  <div className="bg-[#E6E9EF] p-5 rounded-[2rem] neu-flat flex-1 flex flex-col justify-between relative overflow-hidden">
-                    <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase">Expired</span>
-                    <span className="text-2xl font-black text-[#F43F5E]">{loading ? '-' : metrics.expiredLicenses}</span>
-                  </div>
-                </div>
-
-              </section>
-
-              {/* BLOCK 3: Carved Screen Log Output */}
-              <section className="col-span-1 lg:col-span-12 bg-[#E6E9EF] p-6 md:p-8 rounded-[2.5rem] neu-flat">
-                <div className="flex justify-between items-center mb-6 px-2">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full neu-inset flex items-center justify-center">
-                      <Terminal className="w-4 h-4 text-[#718096]" />
-                    </div>
-                    <h3 className="text-xs font-black text-[#4A5568] tracking-widest uppercase">System Logs</h3>
-                  </div>
-                  <span className="text-[9px] bg-[#E6E9EF] text-[#10B981] px-3 py-1 rounded-full font-black uppercase tracking-widest neu-convex">
-                    Healthy
-                  </span>
-                </div>
-
-                <div className="neu-inset rounded-[2rem] p-4 md:p-6 text-[11px] space-y-3 font-mono">
-                  {logs.map((log) => {
-                    let badgeColor = 'text-[#10B981]';
-                    let bgBadge = 'bg-[#10B981]/10';
-                    if (log.severity === 'warning') { badgeColor = 'text-[#F59E0B]'; bgBadge = 'bg-[#F59E0B]/10'; }
-                    if (log.severity === 'critical') { badgeColor = 'text-[#F43F5E] font-black'; bgBadge = 'bg-[#F43F5E]/10'; }
+                    let statusColor = 'text-[#10B981]';
+                    let statusBg = 'bg-[#10B981]/10';
+                    if (app.status === 'MAINTENANCE') {
+                      statusColor = 'text-[#F59E0B]';
+                      statusBg = 'bg-[#F59E0B]/10';
+                    } else if (app.status === 'DEPRECATED') {
+                      statusColor = 'text-[#F43F5E]';
+                      statusBg = 'bg-[#F43F5E]/10';
+                    }
 
                     return (
-                      <div key={log.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-2 rounded-xl hover:bg-[#E6E9EF] transition-colors">
-                        <span className="text-[#A0AEC0] font-bold flex-shrink-0">[{log.created_at}]</span>
-                        <div className="flex-grow flex flex-col sm:flex-row sm:items-center sm:space-x-3">
-                          <span className={`px-2 py-1 rounded-md text-[9px] uppercase tracking-wider ${badgeColor} ${bgBadge}`}>
-                            {log.action}
+                      <div 
+                        key={app.id}
+                        onClick={() => {
+                          setSelectedAppForModal(app);
+                          setIsAppModalOpen(true);
+                        }}
+                        className="bg-[#E6E9EF] p-5 rounded-[2rem] neu-flat hover:scale-[0.98] active:scale-[0.96] transition-all cursor-pointer flex flex-col justify-between space-y-4"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="w-10 h-10 rounded-xl neu-convex flex items-center justify-center text-[#3B82F6] flex-shrink-0">
+                            <Smartphone className="w-5 h-5" />
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${statusBg} ${statusColor} neu-inset`}>
+                            {app.status}
                           </span>
-                          <span className="text-[#4A5568] font-semibold">{log.description}</span>
                         </div>
+
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-black text-[#2D3748] tracking-tight truncate leading-tight">{app.app_name}</h3>
+                          <p className="text-[10px] text-[#718096] font-bold mt-1 leading-tight break-all">{app.package_name}</p>
+                        </div>
+
+                        <div className="h-[1px] bg-slate-300/50 w-full rounded" />
+
+                        <div className="grid grid-cols-2 gap-3 text-[10px] font-bold text-[#718096]">
+                          <div className="flex items-center space-x-1.5 font-bold min-w-0">
+                            <Key className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                            <span className="truncate">{activeLics} / {totalLics} Lic</span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 font-bold min-w-0">
+                            <Activity className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                            <span className="truncate">{appDevicesCount} Dev</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1 text-[9px] text-[#A0AEC0] font-black uppercase">
+                          <span className="neu-inset px-2.5 py-1 rounded-lg text-blue-500">v{app.current_version}</span>
+                          <span>Updated {app.updated_at ? new Date(app.updated_at).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }) : 'Baru'}</span>
+                        </div>
+
                       </div>
                     );
                   })}
                 </div>
-              </section>
+              )}
+            </div>
 
-            </main>
+            {/* Quick Navigation Buttons */}
+            <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <button 
+                onClick={() => handleActionClick('licenses')}
+                className="w-full py-4 text-[#8B5CF6] font-black uppercase tracking-wider text-xs rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center space-x-2"
+              >
+                <Key className="w-4 h-4" />
+                <span>Kelola Lisensi</span>
+              </button>
+              <button 
+                onClick={() => handleActionClick('updates')}
+                className="w-full py-4 text-[#10B981] font-black uppercase tracking-wider text-xs rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center space-x-2"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span>Unggah Pembaharuan</span>
+              </button>
+              <button 
+                onClick={() => handleActionClick('feedback')}
+                className="w-full py-4 text-[#F43F5E] font-black uppercase tracking-wider text-xs rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center space-x-2"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>Crash & Feedback</span>
+              </button>
+            </div>
+
           </div>
         ) : (
           // RENDER OTHER VIEWS (Workspace Wrapper with Neumorphic Override)
@@ -696,6 +714,169 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           );
         })}
       </div>
+
+      {/* --- APPLICATION DETAIL MODAL --- */}
+      {isAppModalOpen && selectedAppForModal && (() => {
+        const app = selectedAppForModal;
+        const appLicenses = licensesList.filter(l => l.application_id === app.id);
+        const totalLics = appLicenses.length;
+        const activeLics = appLicenses.filter(l => l.status === 'ACTIVE').length;
+        const expiredLics = appLicenses.filter(l => l.status === 'EXPIRED' || l.status === 'SUSPENDED').length;
+        
+        const appLicenseIds = new Set(appLicenses.map(l => l.id));
+        const appDevicesCount = devicesList.filter(d => d.license_id && appLicenseIds.has(d.license_id)).length;
+
+        let statusColor = 'text-[#10B981]';
+        let statusBg = 'bg-[#10B981]/10';
+        if (app.status === 'MAINTENANCE') {
+          statusColor = 'text-[#F59E0B]';
+          statusBg = 'bg-[#F59E0B]/10';
+        } else if (app.status === 'DEPRECATED') {
+          statusColor = 'text-[#F43F5E]';
+          statusBg = 'bg-[#F43F5E]/10';
+        }
+
+        const handleCopyText = (text: string) => {
+          navigator.clipboard.writeText(text).then(() => {
+            setCopiedAppId(app.id);
+            setTimeout(() => setCopiedAppId(null), 2000);
+          });
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#E6E9EF]/60 backdrop-blur-md animate-[zoomInSoft_0.25s_ease-out]">
+            <div className="w-full max-w-lg bg-[#E6E9EF] p-6 rounded-[2.5rem] neu-flat max-h-[90vh] overflow-y-auto relative flex flex-col space-y-6">
+              
+              {/* Close Button */}
+              <button 
+                onClick={() => {
+                  setIsAppModalOpen(false);
+                  setSelectedAppForModal(null);
+                }}
+                className="absolute top-6 right-6 w-10 h-10 rounded-full flex items-center justify-center text-[#A0AEC0] hover:text-[#2D3748] bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Title Header */}
+              <div className="flex items-center space-x-4 pt-2">
+                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-[#3B82F6] flex items-center justify-center flex-shrink-0 neu-convex">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <div className="min-w-0 pr-10">
+                  <h3 className="text-base font-black text-[#2D3748] truncate-none flex-wrap leading-tight">{app.app_name}</h3>
+                  <div className="flex items-center space-x-1.5 mt-1">
+                    <span className="text-[10px] text-[#718096] font-bold break-all select-all">{app.package_name}</span>
+                    <button 
+                      onClick={() => handleCopyText(app.package_name)}
+                      className="text-blue-500 hover:text-blue-600 focus:outline-none"
+                      title="Salin Package Name"
+                    >
+                      {copiedAppId === app.id ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Panel */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-inset flex flex-col justify-center">
+                  <span className="text-[9px] text-[#718096] font-black uppercase tracking-wider">Status Aplikasi</span>
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest mt-1.5 w-fit ${statusBg} ${statusColor} neu-flat`}>
+                    {app.status}
+                  </span>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-inset flex flex-col justify-center">
+                  <span className="text-[9px] text-[#718096] font-black uppercase tracking-wider">Versi Terpasang</span>
+                  <span className="text-xs font-black text-blue-500 mt-1 uppercase tracking-wider">
+                    v{app.current_version}
+                  </span>
+                </div>
+              </div>
+
+              {/* License & Device Breakdown */}
+              <div className="p-5 rounded-2xl bg-[#E6E9EF] neu-inset space-y-3">
+                <h4 className="text-[10px] font-black text-[#4A5568] uppercase tracking-wider">Distribusi & Penggunaan</h4>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-[#A0AEC0] font-bold uppercase">Total Lisensi</p>
+                    <p className="font-black text-[#2D3748]">{totalLics} Lisensi</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-[#A0AEC0] font-bold uppercase">Lisensi Aktif</p>
+                    <p className="font-black text-[#10B981]">{activeLics} Aktif</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-[#A0AEC0] font-bold uppercase">Perangkat Terhubung</p>
+                    <p className="font-black text-emerald-500">{appDevicesCount} Perangkat</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-[#A0AEC0] font-bold uppercase">Lisensi Expired</p>
+                    <p className="font-black text-rose-500">{expiredLics} Expired</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Version Config Notes */}
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black text-[#4A5568] uppercase tracking-wider">Catatan Rilis & Informasi Versi</h4>
+                <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-inset text-xs font-semibold text-[#718096] leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
+                  {app.release_notes || 'Tidak ada catatan rilis untuk versi ini.'}
+                </div>
+              </div>
+
+              {/* Download URL Section */}
+              {app.download_url && (
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-black text-[#4A5568] uppercase tracking-wider">Tautan Unduhan APK</h4>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-grow p-3 rounded-xl bg-[#E6E9EF] neu-inset text-[10px] text-[#718096] truncate pr-4 font-mono select-all">
+                      {app.download_url}
+                    </div>
+                    <a 
+                      href={app.download_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="w-10 h-10 rounded-xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center text-blue-500 flex-shrink-0 transition-all"
+                      title="Unduh APK"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Settings / Config redirect */}
+              <div className="pt-2 flex space-x-3">
+                <button
+                  onClick={() => {
+                    setIsAppModalOpen(false);
+                    setSelectedAppForModal(null);
+                    handleActionClick('applications');
+                  }}
+                  className="flex-1 py-3 text-blue-500 font-black uppercase tracking-wider text-xs rounded-xl bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
+                >
+                  Kelola Detail Aplikasi
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAppModalOpen(false);
+                    setSelectedAppForModal(null);
+                  }}
+                  className="px-6 py-3 text-[#718096] font-black uppercase tracking-wider text-xs rounded-xl bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
+                >
+                  Tutup
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* --- EXIT CONFIRMATION DIALOG (Glassmorphism) --- */}
       {showExitModal && (
