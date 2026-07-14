@@ -11,6 +11,7 @@ import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
 import { ApkStatsDashboard } from '../apkstats/ApkStatsDashboard';
 import { CrashReportScreen } from '../crash/CrashReportScreen';
 import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
+import { CloudflareFileManagerScreen } from '../updates/CloudflareFileManagerScreen';
 import {
   RefreshCw,
   Wifi,
@@ -48,7 +49,7 @@ interface LogEntry {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -418,6 +419,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 <>
                   <button onClick={() => handleActionClick('applications')} className="neu-menu-btn"><Smartphone className="w-4 h-4 mr-4 text-[#10B981]" /> <span>Aplikasi</span></button>
                   <button onClick={() => handleActionClick('updates')} className="neu-menu-btn"><UploadCloud className="w-4 h-4 mr-4 text-[#10B981]" /> <span>Pembaharuan</span></button>
+                  <button onClick={() => handleActionClick('cloudflare_files')} className="neu-menu-btn"><Database className="w-4 h-4 mr-4 text-[#10B981]" /> <span>Berkas Cloudflare</span></button>
                 </>
               )}
               {openDropdown === 'broadcast' && (
@@ -655,6 +657,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               {activeView === 'announcements' && <AnnouncementScreen />}
               {activeView === 'feedback' && <FeedbackCenterScreen session={session} />}
               {activeView === 'config' && <RemoteConfigScreen />}
+              {activeView === 'cloudflare_files' && <CloudflareFileManagerScreen />}
             </div>
           </div>
         )}
