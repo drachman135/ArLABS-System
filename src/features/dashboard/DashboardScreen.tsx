@@ -479,7 +479,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       </aside>
 
       {/* --- TOP GREETING HEADER --- */}
-      <header className="sticky top-0 z-30 bg-[#F4F7FC]/85 backdrop-blur-md px-6 py-4 flex justify-between items-center border-b border-gray-200/50 mb-6">
+      <header className={`fixed top-0 left-0 right-0 z-30 bg-[#F4F7FC]/85 backdrop-blur-md px-6 py-4 flex justify-between items-center border-b border-gray-200/50 transition-all duration-300 ease-in-out ${isSidebarPinned ? 'lg:left-[260px]' : 'lg:left-[80px]'}`}>
         <div className="flex items-center space-x-3">
           {/* Mobile hamburger menu trigger */}
           <button 
@@ -518,7 +518,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       </header>
 
       {/* --- MAIN DASHBOARD WORKSPACE --- */}
-      <div className="max-w-[1400px] mx-auto relative z-10 w-full">
+      <div className="max-w-[1400px] mx-auto relative z-10 w-full pt-[88px] px-4 md:px-0">
         {activeView === 'dashboard' ? (
           <div className="px-6 space-y-6 pb-12 animate-[zoomInSoft_0.2s_ease-out]">
             
@@ -696,7 +696,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </div>
         ) : (
           // RENDER OTHER VIEWS inside clean container
-          <div className="bg-white p-4 sm:p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-4 md:mx-6 mb-12 w-auto max-w-[calc(100vw-2rem)] md:max-w-full overflow-hidden">
+          <div 
+            className="bg-white p-4 sm:p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-auto mb-12 w-full overflow-hidden"
+            style={{ maxWidth: 'calc(100vw - 32px)' }}
+          >
             <div className="flex items-center space-x-4 mb-8">
               <button 
                 onClick={() => handleActionClick('dashboard')} 
@@ -1016,74 +1019,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         @keyframes slideInRightSoft {
           from { transform: translateX(120%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* ========================================================================= */
-        /* GLOBAL CSS OVERRIDE: FORCE NEUMORPHISM ON CHILD COMPONENTS                */
-        /* Menyesuaikan file lain agar menyatu dengan tema Soft Tactile              */
-        /* ========================================================================= */
-        
-        .neu-content-wrapper > div {
-           max-width: 100%;
-           overflow-x: auto;
-        }
-
-        /* 1. Override basic background to flat clay */
-        .neu-content-wrapper div[class*="bg-white"],
-        .neu-content-wrapper div[class*="bg-slate-"],
-        .neu-content-wrapper div[class*="bg-gray-"],
-        .neu-content-wrapper div[class*="bg-[#"] {
-          background-color: #E6E9EF !important;
-          box-shadow: 6px 6px 12px #D1D5DB, -6px -6px 12px #FFFFFF !important;
-          border: none !important;
-          border-radius: 24px !important;
-          margin-bottom: 16px;
-        }
-
-        /* 2. Text standardization for readability */
-        .neu-content-wrapper [class*="text-white"],
-        .neu-content-wrapper [class*="text-gray-2"],
-        .neu-content-wrapper [class*="text-gray-3"] {
-          color: #4A5568 !important;
-        }
-        .neu-content-wrapper h1, 
-        .neu-content-wrapper h2, 
-        .neu-content-wrapper h3 {
-          color: #2D3748 !important;
-          font-weight: 900 !important;
-        }
-
-        /* 3. Inputs, Textareas, and Selects become inset physical fields */
-        .neu-content-wrapper input,
-        .neu-content-wrapper select,
-        .neu-content-wrapper textarea {
-          background-color: #E6E9EF !important;
-          box-shadow: inset 4px 4px 8px #D1D5DB, inset -4px -4px 8px #FFFFFF !important;
-          border: none !important;
-          color: #2D3748 !important;
-          border-radius: 12px !important;
-          padding: 12px 16px !important;
-          outline: none !important;
-        }
-        
-        .neu-content-wrapper input::placeholder,
-        .neu-content-wrapper textarea::placeholder {
-          color: #A0AEC0 !important;
-          font-weight: bold;
-        }
-
-        /* 4. Buttons become convex or pressed */
-        .neu-content-wrapper button[class*="bg-blue"],
-        .neu-content-wrapper button[class*="bg-[#0EA5E9]"] {
-          background: linear-gradient(145deg, #F0F3F8, #CDD1D8) !important;
-          box-shadow: 6px 6px 12px #D1D5DB, -6px -6px 12px #FFFFFF !important;
-          color: #3B82F6 !important;
-          border: none !important;
-          border-radius: 12px !important;
-          font-weight: 900 !important;
-        }
-        .neu-content-wrapper button:active {
-          box-shadow: inset 4px 4px 8px #D1D5DB, inset -4px -4px 8px #FFFFFF !important;
         }
       `}</style>
     </div>

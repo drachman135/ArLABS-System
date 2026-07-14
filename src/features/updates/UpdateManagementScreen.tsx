@@ -699,7 +699,7 @@ export const UpdateManagementScreen: React.FC = () => {
 
             {/* Cloudflare CDN Url with File Uploader */}
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
                   APK Binary File / Storage Link
                 </label>
@@ -709,7 +709,7 @@ export const UpdateManagementScreen: React.FC = () => {
                     setUseManualUrl(!useManualUrl);
                     resetUpload();
                   }}
-                  className="text-[9px] text-[#0EA5E9] hover:underline font-bold"
+                  className="text-[9px] text-[#0EA5E9] hover:underline font-bold text-left sm:text-right"
                 >
                   {useManualUrl ? 'Gunakan File Uploader' : 'Masukkan URL Manual'}
                 </button>
