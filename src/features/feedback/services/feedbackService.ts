@@ -169,3 +169,60 @@ export async function updateFeedbackReport(
     throw err;
   }
 }
+
+// ──────────────────────────────────────────────────────────────
+// FETCH MESSAGES FOR A FEEDBACK REPORT
+// ──────────────────────────────────────────────────────────────
+export async function fetchFeedbackMessages(
+  reportId: string
+): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('feedback_messages')
+      .select('*')
+      .eq('feedback_report_id', reportId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data || [];
+  } catch (err: any) {
+    console.error('Failed to fetch feedback messages:', err);
+    throw err;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// SEND A REPLY MESSAGE FOR A FEEDBACK REPORT
+// ──────────────────────────────────────────────────────────────
+export async function sendFeedbackMessage(
+  reportId: string,
+  senderType: 'ADMIN' | 'CLIENT',
+  senderName: string,
+  message: string
+): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .from('feedback_messages')
+      .insert({
+        feedback_report_id: reportId,
+        sender_type: senderType,
+        sender_name: senderName,
+        message: message
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  } catch (err: any) {
+    console.error('Failed to send feedback message:', err);
+    throw err;
+  }
+}
+

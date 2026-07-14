@@ -720,7 +720,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               {activeView === 'updates' && <UpdateManagementScreen />}
               {activeView === 'notifications' && <NotificationScreen />}
               {activeView === 'announcements' && <AnnouncementScreen />}
-              {activeView === 'feedback' && <FeedbackCenterScreen session={session} />}
+              {activeView === 'feedback' && <FeedbackCenterScreen session={session} profile={profile} />}
               {activeView === 'config' && <RemoteConfigScreen />}
               {activeView === 'cloudflare_files' && <CloudflareFileManagerScreen />}
             </div>

@@ -35,3 +35,13 @@ export interface FeedbackSummaryStats {
   todayCount: number;
   thisWeekCount: number;
 }
+
+export interface FeedbackMessage {
+  id: string;
+  feedback_report_id: string;
+  sender_type: 'ADMIN' | 'CLIENT';
+  sender_name: string;
+  message: string;
+  created_at: string;
+}
+

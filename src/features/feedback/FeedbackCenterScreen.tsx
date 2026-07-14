@@ -8,9 +8,11 @@ import {
   fetchFeedbackStats, 
   fetchFeedbackReports, 
   fetchFeedbackReportDetail, 
-  updateFeedbackReport 
+  updateFeedbackReport,
+  fetchFeedbackMessages,
+  sendFeedbackMessage
 } from './services/feedbackService';
-import type { FeedbackReport, FeedbackSummaryStats, FeedbackStatus } from './types/feedback.types';
+import type { FeedbackReport, FeedbackSummaryStats, FeedbackStatus, FeedbackMessage } from './types/feedback.types';
 import { supabase } from '../../core/supabase';
 
 // ─── Skeleton Loading Helper ─────────────────────────────────
@@ -72,9 +74,10 @@ const Badge: React.FC<{ status: FeedbackStatus }> = ({ status }) => {
 
 interface FeedbackCenterScreenProps {
   session: any;
+  profile?: { name: string; role: string; email: string } | null;
 }
 
-export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ session }) => {
+export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ session, profile }) => {
   const token = session.access_token;
 
   // Telemetry Dashboard Metrics
@@ -91,6 +94,13 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
   const [detail, setDetail] = useState<FeedbackReport | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   
+  // Chat messaging states
+  const [messages, setMessages] = useState<FeedbackMessage[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const [activeTabDetail, setActiveTabDetail] = useState<'chat' | 'telemetry'>('chat');
+
   // Developer Notes Form state
   const [devNote, setDevNote] = useState('');
   const [targetStatus, setTargetStatus] = useState<FeedbackStatus>('NEW');
@@ -190,16 +200,69 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
     setSelectedId(id);
     setLoadingDetail(true);
     setDetailError(null);
+    setMessages([]);
+    setActiveTabDetail('chat'); // Default to chat tab
     try {
       const report = await fetchFeedbackReportDetail(token, id);
       setDetail(report);
       setDevNote(report.developer_note || '');
       setTargetStatus(report.status);
+
+      // Load existing messages in chat thread
+      setLoadingMessages(true);
+      const msgs = await fetchFeedbackMessages(id);
+      setMessages(msgs);
     } catch (err: any) {
       setDetailError(err.message || 'Failed to fetch report details.');
       setDetail(null);
     } finally {
       setLoadingDetail(false);
+      setLoadingMessages(false);
+    }
+  };
+
+  // Real-time listener for incoming messages on the selected feedback report
+  useEffect(() => {
+    if (!selectedId) return;
+
+    const channel = supabase
+      .channel(`feedback_messages_room:${selectedId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'feedback_messages',
+        filter: `feedback_report_id=eq.${selectedId}`
+      }, (payload) => {
+        const newMsg = payload.new as FeedbackMessage;
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedId]);
+
+  // Handle sending a reply in the chat room
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyText.trim() || !selectedId) return;
+    setSendingReply(true);
+    try {
+      const senderName = profile?.name || 'Admin';
+      const newMsg = await sendFeedbackMessage(selectedId, 'ADMIN', senderName, replyText);
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+      setReplyText('');
+    } catch (err: any) {
+      alert('Gagal mengirim balasan: ' + (err.message || err));
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -630,192 +693,293 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   <p className="text-xs font-bold">Gagal memuat detail: {detailError}</p>
                 </div>
               ) : detail ? (
-                <div className="space-y-6">
+                <div className="space-y-6 animate-in fade-in duration-200">
                   
                   {/* Category, Title, Status Row */}
                   <div>
                     <div className="flex items-center space-x-3 mb-2">
                       <Badge status={detail.status} />
-                      <span className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-widest bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
+                      <span className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-widest bg-gray-50 px-2 py-0.5 rounded border border-gray-200 font-sans">
                         {detail.category}
                       </span>
                     </div>
                     <h2 className="text-base font-black text-[#1E293B] tracking-tight mb-2">
                       {detail.title}
                     </h2>
-                    <p className="text-xs text-textSecondary bg-slate-50/50 p-4 rounded-2xl border border-gray-100 leading-relaxed font-sans">
+                    <p className="text-xs text-slate-600 bg-slate-50/50 p-4 rounded-2xl border border-gray-100 leading-relaxed font-sans">
                       {detail.description}
                     </p>
                   </div>
 
-                  {/* Device & Package Meta Info Grid */}
-                  <div className="border-t border-gray-100 pt-6">
-                    <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Telemetri Perangkat & Paket</h4>
-                    <div className="grid grid-cols-2 gap-4 text-xs font-sans">
-                      
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Aplikasi</span>
-                        <span className="font-bold text-[#1E293B]">{detail.application_name || 'Generic POS'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Nama Paket</span>
-                        <span className="font-mono text-[#64748B] text-[10px]">{detail.package_name}</span>
-                      </div>
-                      
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Versi Aplikasi</span>
-                        <span className="font-bold text-[#1E293B]">v{detail.app_version}</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Versi Database</span>
-                        <span className="font-mono text-[#64748B]">{detail.database_version || 'N/A'}</span>
-                      </div>
-
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Android / SDK</span>
-                        <span className="font-semibold text-[#1E293B]">Android {detail.android_version || 'N/A'} (API {detail.sdk_version || 'N/A'})</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Tipe Build</span>
-                        <span className="font-mono text-xs text-[#64748B]">{detail.build_type || 'RELEASE'}</span>
-                      </div>
-
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Host Perangkat Keras</span>
-                        <span className="font-semibold text-[#1E293B]">
-                          {detail.manufacturer || ''} {detail.device_brand || ''} {detail.device_model || ''}
-                        </span>
-                        {detail.device_name && <span className="text-[10px] text-gray-400 block">({detail.device_name})</span>}
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">ID Lisensi</span>
-                        <span className="font-mono text-[10px] text-[#64748B] truncate block" title={detail.license_id || ''}>
-                          {detail.license_id}
-                        </span>
-                      </div>
-
-                      {detail.whatsapp && (
-                        <div>
-                          <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Kontak WhatsApp</span>
-                          <span className="font-bold text-emerald-600 block">{detail.whatsapp}</span>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Waktu Pengambilan</span>
-                        <span className="text-gray-500 font-mono text-[10px]">
-                          {new Date(detail.timestamp).toLocaleString('en-US', { hour12: false })}
-                        </span>
-                      </div>
-
-                    </div>
-                  </div>
-
-                  {/* Screenshot Section */}
-                  {detail.screenshot_url && (
-                    <div className="border-t border-gray-100 pt-6">
-                      <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Tangkapan Layar Terlampir</h4>
-                      <div 
-                        onClick={() => setLightboxUrl(detail.screenshot_url)}
-                        className="relative max-w-full rounded-2xl overflow-hidden border border-gray-200 cursor-zoom-in hover:brightness-95 transition-all duration-300 shadow-sm"
-                      >
-                        <img 
-                          src={detail.screenshot_url} 
-                          alt="Tangkapan Layar Masukan" 
-                          className="max-h-48 object-cover w-full"
-                        />
-                        <div className="absolute bottom-3 right-3 bg-black/60 text-white rounded-lg p-1.5 flex items-center space-x-1">
-                          <Eye className="w-3.5 h-3.5" />
-                          <span className="text-[8px] font-bold uppercase tracking-wider">Klik untuk Memperbesar</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Diagnostic Log */}
-                  {detail.diagnostic_log && (
-                    <div className="border-t border-gray-100 pt-6">
-                      <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Payload Log Diagnostik</h4>
-                      <pre className="bg-[#1E293B] text-gray-200 p-4 rounded-2xl text-[10px] font-mono overflow-auto max-h-48 whitespace-pre-wrap select-text">
-                        {detail.diagnostic_log}
-                      </pre>
-                    </div>
-                  )}
-
-                  {/* Status & Developer Notes Form */}
-                  <div className="border-t border-[#F0F2F5] pt-6 space-y-4">
-                    <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider">Intervensi Pengembang</h4>
-                    
-                    {/* Status Management */}
-                    <div>
-                      <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">Alur Kerja Pembaruan Status</label>
-                      <div className="flex flex-wrap gap-2">
-                        {['NEW', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'].map((st) => {
-                          const statusVal = st as FeedbackStatus;
-                          const currentVal = detail.status || 'NEW';
-                          const isAllowed = getAvailableTransitions(currentVal).includes(statusVal);
-                          const isActive = targetStatus === statusVal;
-
-                          return (
-                            <button
-                              key={statusVal}
-                              disabled={!isAllowed}
-                              onClick={() => setTargetStatus(statusVal)}
-                              className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all duration-200 ${
-                                isActive 
-                                  ? 'bg-[#1E293B] text-white border-transparent' 
-                                  : isAllowed
-                                    ? 'bg-white border-gray-200 hover:bg-gray-50 text-[#64748B]'
-                                    : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed opacity-50'
-                              }`}
-                            >
-                              {statusVal}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Workflow help tip info box */}
-                      <p className="text-[8.5px] text-[#94a3b8] font-semibold mt-2 uppercase tracking-wide flex items-center space-x-1.5">
-                        <UserCheck className="w-3 h-3 text-[#0EA5E9]" />
-                        <span>Alur kerja: NEW ➔ IN_PROGRESS ➔ RESOLVED atau REJECTED</span>
-                      </p>
-                    </div>
-
-                    {/* Developer internal note */}
-                    <div>
-                      <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">
-                        Catatan Pengembang (Hanya Catatan Internal)
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={devNote}
-                        onChange={(e) => setDevNote(e.target.value)}
-                        placeholder="Tulis resolusi tim internal, log masalah perangkat keras, atau catatan debug..."
-                        className="w-full p-3 border border-gray-200 rounded-2xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none"
-                      />
-                    </div>
-
-                    {/* Save update button */}
+                  {/* Detail Panel Tabs */}
+                  <div className="flex border-b border-gray-100 mb-2 text-xs font-bold uppercase tracking-wider font-sans">
                     <button
-                      disabled={savingDetail || (targetStatus === detail.status && devNote === (detail.developer_note || ''))}
-                      onClick={handleSaveDetail}
-                      className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-[#0EA5E9] to-[#38bdf8] text-white font-bold py-2.5 rounded-2xl text-xs shadow-md disabled:opacity-50 disabled:pointer-events-none transition-all duration-300 active:scale-98"
+                      onClick={() => setActiveTabDetail('chat')}
+                      className={`flex-1 pb-3 text-center border-b-2 transition-all ${
+                        activeTabDetail === 'chat'
+                          ? 'border-[#0EA5E9] text-[#0EA5E9]'
+                          : 'border-transparent text-[#94a3b8] hover:text-[#1E293B]'
+                      }`}
                     >
-                      {savingDetail ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Menyimpan Perubahan...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                          <span>Simpan Catatan & Atur Status</span>
-                        </>
-                      )}
+                      Utas Diskusi (Chat)
                     </button>
-
+                    <button
+                      onClick={() => setActiveTabDetail('telemetry')}
+                      className={`flex-1 pb-3 text-center border-b-2 transition-all ${
+                        activeTabDetail === 'telemetry'
+                          ? 'border-[#0EA5E9] text-[#0EA5E9]'
+                          : 'border-transparent text-[#94a3b8] hover:text-[#1E293B]'
+                      }`}
+                    >
+                      Data Telemetri
+                    </button>
                   </div>
+
+                  {/* TAB 1: Chat/Obrolan dengan Klien */}
+                  {activeTabDetail === 'chat' && (
+                    <div className="space-y-4 font-sans">
+                      {/* Messages Thread Box */}
+                      <div className="bg-slate-50 border border-gray-200/50 rounded-2xl p-4 h-[300px] overflow-y-auto flex flex-col space-y-3">
+                        {loadingMessages ? (
+                          <div className="flex flex-col items-center justify-center h-full space-y-2 text-[#94a3b8]">
+                            <RefreshCw className="w-5 h-5 animate-spin text-[#0EA5E9]" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Memuat percakapan...</span>
+                          </div>
+                        ) : messages.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full text-center p-6 text-[#94a3b8] space-y-2">
+                            <MessageSquare className="w-8 h-8 text-gray-300" />
+                            <p className="text-[11px] font-bold text-[#1E293B]">Belum Ada Percakapan</p>
+                            <p className="text-[9px] leading-normal text-[#94a3b8]">Kirim balasan pertama Anda di bawah untuk membuka komunikasi 1-on-1 dengan klien.</p>
+                          </div>
+                        ) : (
+                          messages.map((msg) => {
+                            const isAdmin = msg.sender_type === 'ADMIN';
+                            return (
+                              <div
+                                key={msg.id}
+                                className={`flex flex-col max-w-[85%] ${
+                                  isAdmin ? 'self-end items-end' : 'self-start items-start'
+                                }`}
+                              >
+                                <span className="text-[8.5px] font-bold text-[#94a3b8] uppercase mb-1 px-1">
+                                  {msg.sender_name}
+                                </span>
+                                <div
+                                  className={`p-3 rounded-2xl text-xs font-semibold leading-relaxed shadow-sm ${
+                                    isAdmin
+                                      ? 'bg-gradient-to-br from-[#0EA5E9] to-[#38bdf8] text-white rounded-tr-none'
+                                      : 'bg-white text-[#1E293B] border border-gray-100 rounded-tl-none'
+                                  }`}
+                                >
+                                  {msg.message}
+                                </div>
+                                <span className="text-[7.5px] text-[#94a3b8] font-mono mt-1 px-1">
+                                  {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      {/* Message Input Box */}
+                      <form onSubmit={handleSendReply} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Ketik balasan Anda ke perangkat klien..."
+                          className="flex-grow px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] focus:border-[#0EA5E9] outline-none font-medium"
+                        />
+                        <button
+                          type="submit"
+                          disabled={sendingReply || !replyText.trim()}
+                          className="bg-[#1E293B] hover:bg-[#2d3a4f] disabled:opacity-40 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all active:scale-95 flex items-center justify-center font-sans select-none"
+                        >
+                          {sendingReply ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <span>Kirim</span>
+                          )}
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* TAB 2: Metadata Telemetri, Lampiran, & Catatan Pengembang */}
+                  {activeTabDetail === 'telemetry' && (
+                    <div className="space-y-6">
+                      
+                      {/* Device & Package Meta Info Grid */}
+                      <div className="border-t border-gray-100 pt-4">
+                        <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Telemetri Perangkat & Paket</h4>
+                        <div className="grid grid-cols-2 gap-4 text-xs font-sans">
+                          
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Aplikasi</span>
+                            <span className="font-bold text-[#1E293B]">{detail.application_name || 'Generic POS'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Nama Paket</span>
+                            <span className="font-mono text-[#64748B] text-[10px]">{detail.package_name}</span>
+                          </div>
+                          
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Versi Aplikasi</span>
+                            <span className="font-bold text-[#1E293B]">v{detail.app_version}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Versi Database</span>
+                            <span className="font-mono text-[#64748B]">{detail.database_version || 'N/A'}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Android / SDK</span>
+                            <span className="font-semibold text-[#1E293B]">Android {detail.android_version || 'N/A'} (API {detail.sdk_version || 'N/A'})</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Tipe Build</span>
+                            <span className="font-mono text-xs text-[#64748B]">{detail.build_type || 'RELEASE'}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Host Perangkat Keras</span>
+                            <span className="font-semibold text-[#1E293B]">
+                              {detail.manufacturer || ''} {detail.device_brand || ''} {detail.device_model || ''}
+                            </span>
+                            {detail.device_name && <span className="text-[10px] text-gray-400 block">({detail.device_name})</span>}
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">ID Lisensi</span>
+                            <span className="font-mono text-[10px] text-[#64748B] truncate block" title={detail.license_id || ''}>
+                              {detail.license_id}
+                            </span>
+                          </div>
+
+                          {detail.whatsapp && (
+                            <div>
+                              <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Kontak WhatsApp</span>
+                              <span className="font-bold text-emerald-600 block">{detail.whatsapp}</span>
+                            </div>
+                          )}
+                          
+                          <div>
+                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-wider block">Waktu Pengambilan</span>
+                            <span className="text-gray-500 font-mono text-[10px]">
+                              {new Date(detail.timestamp).toLocaleString('en-US', { hour12: false })}
+                            </span>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      {/* Screenshot Section */}
+                      {detail.screenshot_url && (
+                        <div className="border-t border-gray-100 pt-6">
+                          <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Tangkapan Layar Terlampir</h4>
+                          <div 
+                            onClick={() => setLightboxUrl(detail.screenshot_url)}
+                            className="relative max-w-full rounded-2xl overflow-hidden border border-gray-200 cursor-zoom-in hover:brightness-95 transition-all duration-300 shadow-sm"
+                          >
+                            <img 
+                              src={detail.screenshot_url} 
+                              alt="Tangkapan Layar Masukan" 
+                              className="max-h-48 object-cover w-full"
+                            />
+                            <div className="absolute bottom-3 right-3 bg-black/60 text-white rounded-lg p-1.5 flex items-center space-x-1">
+                              <Eye className="w-3.5 h-3.5" />
+                              <span className="text-[8px] font-bold uppercase tracking-wider">Klik untuk Memperbesar</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Diagnostic Log */}
+                      {detail.diagnostic_log && (
+                        <div className="border-t border-gray-100 pt-6">
+                          <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider mb-3">Payload Log Diagnostik</h4>
+                          <pre className="bg-[#1E293B] text-gray-200 p-4 rounded-2xl text-[10px] font-mono overflow-auto max-h-48 whitespace-pre-wrap select-text">
+                            {detail.diagnostic_log}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Status & Developer Notes Form */}
+                      <div className="border-t border-[#F0F2F5] pt-6 space-y-4">
+                        <h4 className="text-[10px] font-bold text-[#1E293B] uppercase tracking-wider">Intervensi Pengembang</h4>
+                        
+                        {/* Status Management */}
+                        <div>
+                          <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">Alur Kerja Pembaruan Status</label>
+                          <div className="flex flex-wrap gap-2">
+                            {['NEW', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'].map((st) => {
+                              const statusVal = st as FeedbackStatus;
+                              const currentVal = detail.status || 'NEW';
+                              const isAllowed = getAvailableTransitions(currentVal).includes(statusVal);
+                              const isActive = targetStatus === statusVal;
+
+                              return (
+                                <button
+                                  key={statusVal}
+                                  disabled={!isAllowed}
+                                  onClick={() => setTargetStatus(statusVal)}
+                                  className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all duration-200 ${
+                                    isActive 
+                                      ? 'bg-[#1E293B] text-white border-transparent' 
+                                      : isAllowed
+                                        ? 'bg-white border-gray-200 hover:bg-gray-50 text-[#64748B]'
+                                        : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed opacity-50'
+                                  }`}
+                                >
+                                  {statusVal}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Workflow help tip info box */}
+                          <p className="text-[8.5px] text-[#94a3b8] font-semibold mt-2 uppercase tracking-wide flex items-center space-x-1.5 font-sans">
+                            <UserCheck className="w-3 h-3 text-[#0EA5E9]" />
+                            <span>Alur kerja: NEW ➔ IN_PROGRESS ➔ RESOLVED atau REJECTED</span>
+                          </p>
+                        </div>
+
+                        {/* Developer internal note */}
+                        <div>
+                          <label className="block text-[9px] font-bold text-[#64748B] uppercase tracking-wider mb-2">
+                            Catatan Pengembang (Hanya Catatan Internal)
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={devNote}
+                            onChange={(e) => setDevNote(e.target.value)}
+                            placeholder="Tulis resolusi tim internal, log masalah perangkat keras, atau catatan debug..."
+                            className="w-full p-3 border border-gray-200 rounded-2xl text-xs focus:ring-1 focus:ring-[#0EA5E9] outline-none"
+                          />
+                        </div>
+
+                        {/* Save update button */}
+                        <button
+                          disabled={savingDetail || (targetStatus === detail.status && devNote === (detail.developer_note || ''))}
+                          onClick={handleSaveDetail}
+                          className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-[#0EA5E9] to-[#38bdf8] text-white font-bold py-2.5 rounded-2xl text-xs shadow-md disabled:opacity-50 disabled:pointer-events-none transition-all duration-300 active:scale-98 font-sans"
+                        >
+                          {savingDetail ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Menyimpan Perubahan...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                              <span>Simpan Catatan & Atur Status</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                    </div>
+                  )}
 
                 </div>
               ) : null}

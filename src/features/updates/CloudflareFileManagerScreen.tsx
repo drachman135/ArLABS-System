@@ -13,7 +13,9 @@ import {
   HardDrive, 
   FolderOpen,
   FileCheck,
-  FileCode
+  FileCode,
+  X,
+  ChevronRight
 } from 'lucide-react';
 
 interface R2File {
@@ -40,6 +42,7 @@ export const CloudflareFileManagerScreen: React.FC = () => {
   const [generalError, setGeneralError] = useState<string>('');
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<R2File | null>(null);
   
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -564,14 +567,15 @@ export const CloudflareFileManagerScreen: React.FC = () => {
                   {filteredFiles.map(file => (
                     <div 
                       key={file.key}
-                      className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all flex items-center justify-between gap-4"
+                      onClick={() => setSelectedFile(file)}
+                      className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all flex items-center justify-between gap-4 cursor-pointer select-none"
                     >
-                      <div className="flex items-center space-x-3 min-w-0">
+                      <div className="flex items-center space-x-3 min-w-0 flex-grow">
                         <div className="w-10 h-10 rounded-xl neu-inset flex items-center justify-center flex-shrink-0">
                           {getFileIcon(file.key)}
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-black text-[#2D3748] break-all whitespace-normal pr-2 select-all">{file.key}</h4>
+                        <div className="min-w-0 flex-grow">
+                          <h4 className="text-xs font-black text-[#2D3748] truncate pr-2 select-none">{file.key}</h4>
                           <div className="flex items-center space-x-2 text-[9px] text-[#A0AEC0] font-bold mt-0.5">
                             <span>{formatBytes(file.size)}</span>
                             <span>•</span>
@@ -580,37 +584,8 @@ export const CloudflareFileManagerScreen: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleCopyUrl(file.url, file.key)}
-                          title="Salin URL CDN"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
-                        >
-                          {copiedKey === file.key ? (
-                            <Check className="w-4 h-4 text-emerald-500" />
-                          ) : (
-                            <Copy className="w-4 h-4" />
-                          )}
-                        </button>
-                        
-                        <a
-                          href={file.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Buka/Unduh Berkas"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-
-                        <button
-                          onClick={() => handleDeleteFile(file.key)}
-                          title="Hapus Permanen"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-red-500 bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="flex-shrink-0 text-[#A0AEC0]">
+                        <ChevronRight className="w-4 h-4" />
                       </div>
                     </div>
                   ))}
@@ -708,6 +683,106 @@ export const CloudflareFileManagerScreen: React.FC = () => {
             )}
           </div>
 
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selectedFile && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
+          <div className="bg-[#E6E9EF] w-full max-w-md p-6 rounded-[2rem] neu-flat relative flex flex-col space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-black text-[#2D3748] uppercase tracking-widest">Detail Berkas</h3>
+                <p className="text-[10px] text-[#A0AEC0] font-bold tracking-widest uppercase mt-0.5">Informasi & Aksi Berkas R2</p>
+              </div>
+              <button
+                onClick={() => setSelectedFile(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 neu-flat hover:neu-pressed transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="space-y-4">
+              {/* File Icon & Name Container */}
+              <div className="flex flex-col items-center text-center p-4 rounded-2xl bg-[#E6E9EF] neu-inset">
+                <div className="w-16 h-16 rounded-2xl neu-convex flex items-center justify-center mb-3">
+                  {getFileIcon(selectedFile.key)}
+                </div>
+                <h4 className="text-xs font-black text-[#2D3748] break-all select-all leading-relaxed px-2">
+                  {selectedFile.key}
+                </h4>
+              </div>
+
+              {/* File Metadata Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 rounded-xl bg-[#E6E9EF] neu-flat">
+                  <span className="text-[9px] text-[#A0AEC0] font-black uppercase tracking-wider block">Ukuran File</span>
+                  <span className="text-xs font-black text-[#2D3748] mt-1 block">
+                    {formatBytes(selectedFile.size)}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-[#E6E9EF] neu-flat">
+                  <span className="text-[9px] text-[#A0AEC0] font-black uppercase tracking-wider block">Tanggal Unggah</span>
+                  <span className="text-[10px] font-black text-[#2D3748] mt-1 block leading-tight">
+                    {new Date(selectedFile.uploaded).toLocaleDateString('id-ID', { 
+                      day: 'numeric', 
+                      month: 'short', 
+                      year: 'numeric',
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="space-y-3 pt-2">
+              <div className="flex gap-4">
+                <button
+                  onClick={() => handleCopyUrl(selectedFile.url, selectedFile.key)}
+                  className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-blue-500 bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
+                >
+                  {copiedKey === selectedFile.key ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-500" />
+                      <span className="text-[10px] font-black uppercase tracking-wider">Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span className="text-[10px] font-black uppercase tracking-wider">Salin URL</span>
+                    </>
+                  )}
+                </button>
+
+                <a
+                  href={selectedFile.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 rounded-xl text-slate-600 bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Buka/Unduh</span>
+                </a>
+              </div>
+
+              <button
+                onClick={() => {
+                  const keyToDelete = selectedFile.key;
+                  setSelectedFile(null); // Close modal before action
+                  handleDeleteFile(keyToDelete);
+                }}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3.5 rounded-xl text-red-500 bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-wider">Hapus Permanen</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
