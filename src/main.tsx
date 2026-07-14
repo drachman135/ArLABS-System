@@ -12,6 +12,39 @@ const App: React.FC = () => {
 
   // Initialize and check current auth session
   useEffect(() => {
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    const tryInitOneSignal = () => {
+      const win = window as any;
+      if (win.plugins?.OneSignal) {
+        try {
+          const OneSignal = win.plugins.OneSignal;
+          OneSignal.initialize("156b25a9-4052-4faa-a38f-d39b7cfc27bd");
+          OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
+            console.log("OneSignal push notification permission response:", success);
+          });
+          console.log("OneSignal SDK initialized successfully from App Root");
+          return true;
+        } catch (err) {
+          console.error("Failed to initialize OneSignal SDK:", err);
+          return false;
+        }
+      }
+      return false;
+    };
+
+    const intervalId = setInterval(() => {
+      attempts++;
+      if (tryInitOneSignal() || attempts >= maxAttempts) {
+        clearInterval(intervalId);
+      }
+    }, 500);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
