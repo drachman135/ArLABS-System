@@ -335,7 +335,7 @@ export const ApkStatsDashboard: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <p className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest">ArLABS Ecosystem</p>
-            <h2 className="text-base font-black text-[#1E293B] tracking-tight mt-0.5">
+            <h2 className="text-base font-black text-[#1E293B] tracking-tight mt-0.5 break-all">
               SYS // APK_DOWNLOAD_STATISTICS
             </h2>
             <div className="flex items-center gap-3 mt-1.5">

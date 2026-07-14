@@ -193,13 +193,13 @@ export const AppManagementScreen: React.FC = () => {
     <div className="max-w-7xl mx-auto space-y-8 font-['Outfit'] select-none">
       
       {/* 1. Frosted Glass Action Header Panel */}
-      <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-6 rounded-[24px] flex justify-between items-center">
-        <div>
+      <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-4 sm:p-6 rounded-[24px] flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <div className="w-full">
           <span className="tracking-widest text-[9px] font-bold text-[#64748B] uppercase">Release Control</span>
-          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1">SYS // APPLICATION_WORKSPACE</h3>
+          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1 break-all">SYS // APPLICATION_WORKSPACE</h3>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
           <button
             onClick={() => setShowAddModal(true)}
             className="border border-transparent bg-[#0EA5E9] hover:bg-[#0EA5E9]/95 text-white px-4 py-2.5 rounded-xl transition-all duration-300 shadow-[2px_2px_5px_rgba(14,165,233,0.3)] flex items-center space-x-2 text-xs font-bold active:scale-98"

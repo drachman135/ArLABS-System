@@ -330,15 +330,15 @@ export const AnnouncementScreen: React.FC = () => {
     <div className="max-w-7xl mx-auto space-y-8 font-['Outfit'] select-none">
       
       {/* Header Panel */}
-      <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-6 rounded-[24px] flex justify-between items-center">
-        <div>
+      <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-4 sm:p-6 rounded-[24px] flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <div className="w-full">
           <span className="tracking-widest text-[9px] font-bold text-[#64748B] uppercase">Notification & Announcements</span>
-          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1">SYS // IN_APP_ANNOUNCEMENT_MANAGER</h3>
+          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1 break-all">SYS // IN_APP_ANNOUNCEMENT_MANAGER</h3>
         </div>
 
         <button
           onClick={() => { fetchAnnouncements(); fetchDropdownData(); }}
-          className="border border-white bg-white hover:border-[#0EA5E9]/50 hover:bg-[#0EA5E9]/10 text-[#1E293B] hover:text-[#0EA5E9] p-2.5 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+          className="border border-white bg-white hover:border-[#0EA5E9]/50 hover:bg-[#0EA5E9]/10 text-[#1E293B] hover:text-[#0EA5E9] p-2.5 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center self-end sm:self-auto"
         >
           <RefreshCw className="w-4 h-4" />
         </button>

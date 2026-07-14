@@ -206,7 +206,7 @@ export const CrashReportScreen: React.FC = () => {
       <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-6 rounded-[24px] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="tracking-widest text-[9px] font-bold text-[#64748B] uppercase">Stability Management</span>
-          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1">SYS // CRASH_ERROR_REPORTING</h3>
+          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1 break-all">SYS // CRASH_ERROR_REPORTING</h3>
           <p className="text-[9px] text-[#94a3b8] font-mono mt-1">
             Offline-first diagnostics queue cache synchronization
           </p>

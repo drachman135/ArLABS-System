@@ -377,7 +377,7 @@ export const AnalyticsDashboard: React.FC = () => {
       <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-5 rounded-[20px] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <p className="text-[9px] text-[#64748B] uppercase font-bold tracking-widest">ArLABS Ecosystem</p>
-          <h2 className="text-base font-black text-[#1E293B] tracking-tight mt-0.5">
+          <h2 className="text-base font-black text-[#1E293B] tracking-tight mt-0.5 break-all">
             SYS // ANALYTICS_DASHBOARD
           </h2>
           {lastRefreshed && (

@@ -599,10 +599,10 @@ export const LicenseScreen: React.FC = () => {
     <div className="max-w-7xl mx-auto space-y-8 font-['Outfit'] select-none">
       
       {/* 1. Frosted Glass Action Header Panel */}
-      <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-6 rounded-[24px] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+      <section className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] hover:shadow-[10px_10px_20px_#d1d5db,-10px_-10px_20px_#ffffff] transition-all duration-300 p-4 sm:p-6 rounded-[24px] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="w-full">
           <span className="tracking-widest text-[9px] font-bold text-[#64748B] uppercase">Security Registry</span>
-          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1">SYS // LICENSE_REGISTRY</h3>
+          <h3 className="text-base font-black text-[#1E293B] tracking-tight mt-1 break-all">SYS // LICENSE_REGISTRY</h3>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">

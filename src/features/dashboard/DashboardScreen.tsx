@@ -48,6 +48,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   const [loading, setLoading] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>('');
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeView]);
+
   // App cards dashboard state
   const [apps, setApps] = useState<any[]>([]);
   const [licensesList, setLicensesList] = useState<any[]>([]);
