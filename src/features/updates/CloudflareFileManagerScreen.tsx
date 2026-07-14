@@ -278,6 +278,47 @@ export const CloudflareFileManagerScreen: React.FC = () => {
       return new Response(null, { headers: corsHeaders });
     }
 
+    const bucket = env.R2_BUCKET; // Pastikan binding R2 bucket di Cloudflare bernama R2_BUCKET
+
+    // 1. JALUR UNDUHAN PUBLIK (GET dengan parameter filename)
+    const filename = url.searchParams.get("filename");
+    if (request.method === "GET" && filename) {
+      try {
+        const object = await bucket.get(filename);
+        if (!object) {
+          return new Response(JSON.stringify({ success: false, error: "File not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+        
+        const headers = new Headers(corsHeaders);
+        object.writeHttpMetadata(headers);
+        headers.set("etag", object.httpEtag);
+        
+        // Atur agar file diunduh langsung (khususnya APK)
+        const ext = filename.split('.').pop()?.toLowerCase();
+        if (ext === 'apk') {
+          headers.set("Content-Disposition", \`attachment; filename="\${filename}"\`);
+          headers.set("Content-Type", "application/vnd.android.package-archive");
+        } else if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '')) {
+          headers.set("Content-Disposition", \`inline; filename="\${filename}"\`);
+        } else {
+          headers.set("Content-Disposition", \`attachment; filename="\${filename}"\`);
+        }
+        
+        return new Response(object.body, {
+          headers
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ success: false, error: err.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+    }
+
+    // 2. PEMERIKSAAN OTORISASI (Wajib untuk list, upload, & delete)
     if (!authHeader || authHeader !== \`Bearer \${env.UPLOAD_SECRET}\`) {
       return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
         status: 401,
@@ -285,8 +326,7 @@ export const CloudflareFileManagerScreen: React.FC = () => {
       });
     }
 
-    const bucket = env.R2_BUCKET; // Pastikan binding R2 bucket di Cloudflare bernama R2_BUCKET
-
+    // 3. JALUR DENGAN OTORISASI
     if (request.method === "GET") {
       try {
         const listed = await bucket.list({ limit: 100 });
@@ -294,7 +334,7 @@ export const CloudflareFileManagerScreen: React.FC = () => {
           key: obj.key,
           size: obj.size,
           uploaded: obj.uploaded,
-          url: env.CDN_URL ? \`\${env.CDN_URL}/\${obj.key}\` : \`https://pub-your-id.r2.dev/\${obj.key}\`
+          url: env.CDN_URL ? \`\${env.CDN_URL}/\${obj.key}\` : \`\${url.origin}\${url.pathname}?filename=\${encodeURIComponent(obj.key)}\`
         }));
         
         return new Response(JSON.stringify({ success: true, files }), {
@@ -311,18 +351,18 @@ export const CloudflareFileManagerScreen: React.FC = () => {
 
     if (request.method === "POST") {
       try {
-        const filename = url.searchParams.get("filename");
-        if (!filename) {
+        const filenameParam = url.searchParams.get("filename");
+        if (!filenameParam) {
           return new Response(JSON.stringify({ success: false, error: "Filename is required" }), {
             status: 400,
             headers: { "Content-Type": "application/json", ...corsHeaders }
           });
         }
         const body = await request.arrayBuffer();
-        await bucket.put(filename, body, {
+        await bucket.put(filenameParam, body, {
           httpMetadata: { contentType: request.headers.get("content-type") || "application/octet-stream" }
         });
-        const downloadUrl = env.CDN_URL ? \`\${env.CDN_URL}/\${filename}\` : \`https://pub-your-id.r2.dev/\${filename}\`;
+        const downloadUrl = env.CDN_URL ? \`\${env.CDN_URL}/\${filenameParam}\` : \`\${url.origin}\${url.pathname}?filename=\${encodeURIComponent(filenameParam)}\`;
         return new Response(JSON.stringify({ success: true, url: downloadUrl }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -337,14 +377,14 @@ export const CloudflareFileManagerScreen: React.FC = () => {
 
     if (request.method === "DELETE") {
       try {
-        const filename = url.searchParams.get("filename");
-        if (!filename) {
+        const filenameParam = url.searchParams.get("filename");
+        if (!filenameParam) {
           return new Response(JSON.stringify({ success: false, error: "Filename parameter is required" }), {
             status: 400,
             headers: { "Content-Type": "application/json", ...corsHeaders }
           });
         }
-        await bucket.delete(filename);
+        await bucket.delete(filenameParam);
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { "Content-Type": "application/json", ...corsHeaders }
@@ -531,7 +571,7 @@ export const CloudflareFileManagerScreen: React.FC = () => {
                           {getFileIcon(file.key)}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-xs font-black text-[#2D3748] truncate pr-2 select-all">{file.key}</h4>
+                          <h4 className="text-xs font-black text-[#2D3748] break-all whitespace-normal pr-2 select-all">{file.key}</h4>
                           <div className="flex items-center space-x-2 text-[9px] text-[#A0AEC0] font-bold mt-0.5">
                             <span>{formatBytes(file.size)}</span>
                             <span>•</span>

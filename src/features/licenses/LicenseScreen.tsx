@@ -205,13 +205,25 @@ export const LicenseScreen: React.FC = () => {
   const handleSuspend = async (id: string) => {
     setActionLoading(id);
     try {
+      const lic = licenses.find(l => l.id === id);
+      const keyText = lic ? lic.license_key : id;
+
       const { error } = await supabase
         .from('licenses')
         .update({ status: 'SUSPENDED', updated_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
+
+      // Log activity
+      await supabase.from('logs').insert([{
+        action: 'LIC_SUSPEND',
+        description: `Lisensi [KEY: ${keyText}] ditangguhkan (Suspended)`,
+        severity: 'warning'
+      }]);
+
       setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, status: 'SUSPENDED' } : lic));
+      window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
       console.error('Failed to suspend license: ', err);
     } finally {
@@ -223,6 +235,9 @@ export const LicenseScreen: React.FC = () => {
   const handleResetDevice = async (id: string) => {
     setActionLoading(id);
     try {
+      const lic = licenses.find(l => l.id === id);
+      const keyText = lic ? lic.license_key : id;
+
       // 1. Delete associated device record
       const { error: deleteError } = await supabase
         .from('devices')
@@ -244,6 +259,13 @@ export const LicenseScreen: React.FC = () => {
         .eq('id', id);
 
       if (updateError) throw updateError;
+
+      // Log activity
+      await supabase.from('logs').insert([{
+        action: 'DEV_RESET',
+        description: `Perangkat di-reset untuk lisensi [KEY: ${keyText}]`,
+        severity: 'info'
+      }]);
 
       setLicenses(prev => prev.map(lic => lic.id === id ? { 
         ...lic, 
@@ -268,12 +290,23 @@ export const LicenseScreen: React.FC = () => {
 
     setActionLoading(id);
     try {
+      const lic = licenses.find(l => l.id === id);
+      const keyText = lic ? lic.license_key : id;
+
       const { error } = await supabase
         .from('licenses')
         .update({ status: 'ACTIVE', updated_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
+
+      // Log activity
+      await supabase.from('logs').insert([{
+        action: 'LIC_ACTIVATE',
+        description: `Lisensi [KEY: ${keyText}] diaktifkan kembali`,
+        severity: 'info'
+      }]);
+
       setLicenses(prev => prev.map(lic => lic.id === id ? { ...lic, status: 'ACTIVE' } : lic));
       window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
@@ -291,6 +324,9 @@ export const LicenseScreen: React.FC = () => {
 
     setActionLoading(id);
     try {
+      const lic = licenses.find(l => l.id === id);
+      const keyText = lic ? lic.license_key : id;
+
       const { error: deviceError } = await supabase
         .from('devices')
         .delete()
@@ -304,6 +340,13 @@ export const LicenseScreen: React.FC = () => {
         .eq('id', id);
 
       if (licenseError) throw licenseError;
+
+      // Log activity
+      await supabase.from('logs').insert([{
+        action: 'LIC_DELETE',
+        description: `Lisensi [KEY: ${keyText}] dihapus permanen`,
+        severity: 'critical'
+      }]);
 
       setLicenses(prev => prev.filter(lic => lic.id !== id));
       window.dispatchEvent(new Event('db-refresh'));
@@ -413,6 +456,13 @@ export const LicenseScreen: React.FC = () => {
         return;
       }
 
+      // Log activity
+      await supabase.from('logs').insert([{
+        action: 'LIC_GEN',
+        description: `Lisensi baru [KEY: ${generatedKey}] dibuat untuk ${customerName}`,
+        severity: 'info'
+      }]);
+
       setSuccessKey(generatedKey);
       setCopied(false);
 
@@ -488,6 +538,13 @@ export const LicenseScreen: React.FC = () => {
         .eq('id', renewingLicense.id);
 
       if (error) throw error;
+
+      // Log activity
+      await supabase.from('logs').insert([{
+        action: 'LIC_RENEW',
+        description: `Lisensi [KEY: ${renewingLicense.license_key}] diperpanjang (${finalLicenseType})`,
+        severity: 'info'
+      }]);
 
       alert('License renewed successfully.');
       setShowRenewModal(false);

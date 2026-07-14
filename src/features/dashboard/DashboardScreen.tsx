@@ -231,40 +231,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       });
 
       // Fetch Applications
-      const { data: appsData, error: appsError } = await supabase
+      const { data: appsData } = await supabase
         .from('applications')
         .select('*')
         .order('app_name', { ascending: true });
 
-      let loadedApps = appsData || [];
-      if (appsError || !appsData || appsData.length === 0) {
-        loadedApps = [
-          { 
-            id: 'app-1', 
-            app_name: 'ArLABS Android Client', 
-            package_name: 'com.arlabs.client', 
-            current_version: '1.0.4', 
-            min_supported_version: '1.0.0', 
-            status: 'ACTIVE', 
-            force_update_required: false, 
-            download_url: 'https://cdn.arlabs.io/apk/release-v1.0.4.apk',
-            release_notes: 'Initial production build deployment with offline caching services and key validations.',
-            updated_at: new Date().toISOString() 
-          },
-          { 
-            id: 'app-2', 
-            app_name: 'ArLABS POS Companion', 
-            package_name: 'com.arlabs.pos', 
-            current_version: '2.1.0', 
-            min_supported_version: '2.0.0', 
-            status: 'MAINTENANCE', 
-            force_update_required: true, 
-            download_url: 'https://cdn.arlabs.io/apk/release-v2.1.0.apk',
-            release_notes: 'Scheduled database indexing and multi-tenant RLS hardening updates.',
-            updated_at: new Date(Date.now() - 86400000).toISOString() 
-          }
-        ];
-      }
+      const loadedApps = appsData || [];
+      
       // Fetch raw data lists for client-side aggregation
       const { data: licensesData } = await supabase
         .from('licenses')
@@ -340,24 +313,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           .order('created_at', { ascending: false })
           .limit(5);
 
-        let loadedLogs = logsData || [];
-        if (loadedLogs.length === 0) {
-          loadedLogs = [
-            { id: 'log-1', action: 'LIC_GEN', description: 'Lisensi baru dibuat oleh Admin (Owner)', severity: 'info', created_at: new Date().toISOString() },
-            { id: 'log-2', action: 'DEV_VALIDATE', description: 'Perangkat [ID: 8a7d3...] divalidasi sukses', severity: 'info', created_at: new Date(Date.now() - 600000).toISOString() },
-            { id: 'log-3', action: 'APP_UPDATE', description: 'Versi baru v2.1.0 diunggah untuk POS Companion', severity: 'warning', created_at: new Date(Date.now() - 3600000).toISOString() },
-            { id: 'log-4', action: 'LIC_SUSPEND', description: 'Lisensi [KEY: 9A8D-...] ditangguhkan (Suspended)', severity: 'critical', created_at: new Date(Date.now() - 7200000).toISOString() },
-            { id: 'log-5', action: 'SYS_INIT', description: 'Sistem disinkronisasi dengan Supabase Cloud', severity: 'info', created_at: new Date(Date.now() - 86400000).toISOString() }
-          ];
-        }
-        setActivityLogs(loadedLogs);
+        setActivityLogs(logsData || []);
       } catch (e) {
         console.warn("Failed fetching logs: ", e);
-        setActivityLogs([
-          { id: 'log-1', action: 'LIC_GEN', description: 'Lisensi baru dibuat oleh Admin (Owner)', severity: 'info', created_at: new Date().toISOString() },
-          { id: 'log-2', action: 'DEV_VALIDATE', description: 'Perangkat [ID: 8a7d3...] divalidasi sukses', severity: 'info', created_at: new Date(Date.now() - 600000).toISOString() },
-          { id: 'log-3', action: 'APP_UPDATE', description: 'Versi baru v2.1.0 diunggah untuk POS Companion', severity: 'warning', created_at: new Date(Date.now() - 3600000).toISOString() }
-        ]);
+        setActivityLogs([]);
       }
     } catch (err: any) {
       setConnected(false);
@@ -657,33 +616,41 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50 text-gray-600 font-medium">
-                        {activityLogs.map((log) => {
-                          let badgeColor = 'bg-blue-50 text-blue-600';
-                          if (log.severity === 'warning') badgeColor = 'bg-amber-50 text-amber-600';
-                          if (log.severity === 'critical') badgeColor = 'bg-rose-50 text-rose-600';
+                        {activityLogs.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-8 text-center text-gray-400 font-bold uppercase tracking-wider">
+                              Tidak Ada Log Aktifitas
+                            </td>
+                          </tr>
+                        ) : (
+                          activityLogs.map((log) => {
+                            let badgeColor = 'bg-blue-50 text-blue-600';
+                            if (log.severity === 'warning') badgeColor = 'bg-amber-50 text-amber-600';
+                            if (log.severity === 'critical') badgeColor = 'bg-rose-50 text-rose-600';
 
-                          const formattedTime = new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                            const formattedTime = new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-                          return (
-                            <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="py-3 flex items-center space-x-1.5">
-                                <Clock className="w-3.5 h-3.5 text-gray-400" />
-                                <span className="font-semibold text-gray-700">{formattedTime}</span>
-                              </td>
-                              <td className="py-3">
-                                <span className="font-mono text-[10px] font-bold text-gray-800">{log.action}</span>
-                              </td>
-                              <td className="py-3">
-                                <span className="font-semibold text-gray-600 line-clamp-1">{log.description}</span>
-                              </td>
-                              <td className="py-3 text-right">
-                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badgeColor}`}>
-                                  {log.severity}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                            return (
+                              <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="py-3 flex items-center space-x-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                  <span className="font-semibold text-gray-700">{formattedTime}</span>
+                                </td>
+                                <td className="py-3">
+                                  <span className="font-mono text-[10px] font-bold text-gray-800">{log.action}</span>
+                                </td>
+                                <td className="py-3">
+                                  <span className="font-semibold text-gray-600 line-clamp-1">{log.description}</span>
+                                </td>
+                                <td className="py-3 text-right">
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badgeColor}`}>
+                                    {log.severity}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
