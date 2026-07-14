@@ -226,3 +226,46 @@ export async function sendFeedbackMessage(
   }
 }
 
+// ──────────────────────────────────────────────────────────────
+// BULK UPDATE FEEDBACK REPORTS STATUS/NOTES
+// ──────────────────────────────────────────────────────────────
+export async function bulkUpdateFeedbackReports(
+  ids: string[],
+  payload: { status?: string; developer_note?: string }
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('feedback_reports')
+      .update(payload)
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (err: any) {
+    console.error('Failed to bulk update feedback reports:', err);
+    throw err;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// BULK DELETE FEEDBACK REPORTS
+// ──────────────────────────────────────────────────────────────
+export async function bulkDeleteFeedbackReports(
+  ids: string[]
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('feedback_reports')
+      .delete()
+      .in('id', ids);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } catch (err: any) {
+    console.error('Failed to bulk delete feedback reports:', err);
+    throw err;
+  }
+}
+

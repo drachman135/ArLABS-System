@@ -10,7 +10,9 @@ import {
   fetchFeedbackReportDetail, 
   updateFeedbackReport,
   fetchFeedbackMessages,
-  sendFeedbackMessage
+  sendFeedbackMessage,
+  bulkUpdateFeedbackReports,
+  bulkDeleteFeedbackReports
 } from './services/feedbackService';
 import type { FeedbackReport, FeedbackSummaryStats, FeedbackStatus, FeedbackMessage } from './types/feedback.types';
 import { supabase } from '../../core/supabase';
@@ -88,6 +90,10 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
   const [reports, setReports] = useState<FeedbackReport[]>([]);
   const [count, setCount] = useState(0);
   const [loadingList, setLoadingList] = useState(true);
+  
+  // Bulk selection states
+  const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
+  const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
 
   // Selected Detail Modal / Drawer state
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -218,6 +224,63 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
     } finally {
       setLoadingDetail(false);
       setLoadingMessages(false);
+    }
+  };
+
+  // Toggle selection for a single report ID
+  const handleToggleSelectBulk = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening the detail panel
+    setSelectedBulkIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Toggle selection for all reports on the current page
+  const handleToggleSelectAll = () => {
+    if (selectedBulkIds.length === reports.length) {
+      setSelectedBulkIds([]);
+    } else {
+      setSelectedBulkIds(reports.map(r => r.id));
+    }
+  };
+
+  // Run bulk update status
+  const handleBulkUpdateStatus = async (status: FeedbackStatus) => {
+    if (selectedBulkIds.length === 0) return;
+    setIsBulkActionLoading(true);
+    try {
+      await bulkUpdateFeedbackReports(selectedBulkIds, { status });
+      setSelectedBulkIds([]);
+      loadReports();
+      loadStats();
+    } catch (err: any) {
+      alert(`Gagal memperbarui status secara massal: ${err.message}`);
+    } finally {
+      setIsBulkActionLoading(false);
+    }
+  };
+
+  // Run bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedBulkIds.length === 0) return;
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus ${selectedBulkIds.length} laporan terpilih secara permanen? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+    setIsBulkActionLoading(true);
+    try {
+      await bulkDeleteFeedbackReports(selectedBulkIds);
+      const deletedIds = [...selectedBulkIds];
+      setSelectedBulkIds([]);
+      loadReports();
+      loadStats();
+      if (selectedId && deletedIds.includes(selectedId)) {
+        setSelectedId(null);
+        setDetail(null);
+      }
+    } catch (err: any) {
+      alert(`Gagal menghapus laporan secara massal: ${err.message}`);
+    } finally {
+      setIsBulkActionLoading(false);
     }
   };
 
@@ -401,6 +464,52 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
               <span>Log Database Masukan</span>
             </h3>
 
+            {/* Bulk Actions Panel */}
+            {selectedBulkIds.length > 0 && (
+              <div className="bg-slate-50 border border-slate-200 rounded-[20px] p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 animate-in slide-in-from-top-4 duration-200 shadow-inner">
+                <div className="flex items-center space-x-3">
+                  <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-black">
+                    {selectedBulkIds.length}
+                  </div>
+                  <span className="text-xs font-bold text-[#334155]">Laporan terpilih untuk tindakan massal</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mr-1">Ubah Status:</span>
+                  <button
+                    disabled={isBulkActionLoading}
+                    onClick={() => handleBulkUpdateStatus('IN_PROGRESS')}
+                    className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-100 disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    Proses
+                  </button>
+                  <button
+                    disabled={isBulkActionLoading}
+                    onClick={() => handleBulkUpdateStatus('RESOLVED')}
+                    className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    Selesai
+                  </button>
+                  <button
+                    disabled={isBulkActionLoading}
+                    onClick={() => handleBulkUpdateStatus('REJECTED')}
+                    className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    Tolak
+                  </button>
+                  
+                  <div className="w-px h-6 bg-slate-200 mx-2 hidden md:block"></div>
+                  
+                  <button
+                    disabled={isBulkActionLoading}
+                    onClick={handleBulkDelete}
+                    className="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-all flex items-center space-x-1 shadow-sm cursor-pointer"
+                  >
+                    <span>Hapus Permanen</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Filter Actions */}
             <div className="space-y-4 mb-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -523,6 +632,14 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
               <table className="w-full border-collapse text-left text-xs font-sans">
                 <thead>
                   <tr className="bg-[#F8FAFC] text-[#64748B] font-bold border-b border-gray-100">
+                    <th className="p-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={reports.length > 0 && selectedBulkIds.length === reports.length}
+                        onChange={handleToggleSelectAll}
+                        className="rounded border-gray-300 text-[#0EA5E9] focus:ring-[#0EA5E9] w-3.5 h-3.5 cursor-pointer"
+                      />
+                    </th>
                     <th className="p-4 uppercase tracking-wider text-[9px]">Status</th>
                     <th className="p-4 uppercase tracking-wider text-[9px]">Kategori</th>
                     <th className="p-4 uppercase tracking-wider text-[9px]">Judul</th>
@@ -535,6 +652,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                   {loadingList ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
+                        <td className="p-4 w-10"><Skeleton className="h-4 w-4" /></td>
                         <td className="p-4"><Skeleton className="h-4 w-12" /></td>
                         <td className="p-4"><Skeleton className="h-4 w-16" /></td>
                         <td className="p-4"><Skeleton className="h-4 w-40" /></td>
@@ -545,7 +663,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                     ))
                   ) : reports.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-12 text-center">
+                      <td colSpan={7} className="p-12 text-center">
                         <div className="flex flex-col items-center justify-center space-y-3">
                           <div className="p-4 bg-slate-50 text-slate-400 rounded-full">
                             <MessageSquare className="w-8 h-8" />
@@ -562,6 +680,14 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                         onClick={() => handleSelectReport(report.id)}
                         className={`hover:bg-[#F8FAFC]/70 transition-colors duration-200 cursor-pointer ${selectedId === report.id ? 'bg-[#0EA5E9]/5 hover:bg-[#0EA5E9]/10' : ''}`}
                       >
+                        <td className="p-4 w-10" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedBulkIds.includes(report.id)}
+                            onChange={(e) => handleToggleSelectBulk(report.id, e as any)}
+                            className="rounded border-gray-300 text-[#0EA5E9] focus:ring-[#0EA5E9] w-3.5 h-3.5 cursor-pointer"
+                          />
+                        </td>
                         <td className="p-4"><Badge status={report.status} /></td>
                         <td className="p-4 font-bold text-[#1E293B]">{report.category}</td>
                         <td className="p-4 font-semibold text-[#64748B]">
@@ -608,7 +734,15 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                     className={`p-4 rounded-[20px] border bg-white space-y-3 transition-colors ${selectedId === report.id ? 'border-[#0EA5E9] bg-[#0EA5E9]/5 shadow-sm' : 'border-gray-200'}`}
                   >
                     <div className="flex justify-between items-center">
-                      <Badge status={report.status} />
+                      <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedBulkIds.includes(report.id)}
+                          onChange={(e) => handleToggleSelectBulk(report.id, e as any)}
+                          className="rounded border-gray-300 text-[#0EA5E9] focus:ring-[#0EA5E9] w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <Badge status={report.status} />
+                      </div>
                       <span className="text-[10px] text-[#94a3b8] font-mono">
                         {new Date(report.created_at).toLocaleDateString()}
                       </span>
