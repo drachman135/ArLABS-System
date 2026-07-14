@@ -36,18 +36,18 @@ const KpiCard: React.FC<{
   bg: string;
   loading?: boolean;
 }> = ({ icon, label, value, color, bg, loading }) => (
-  <Card className="p-5 flex flex-col justify-between h-32">
+  <Card className="p-3.5 sm:p-5 flex flex-col justify-between h-28 sm:h-32 min-w-0">
     <div className="flex justify-between items-start">
-      <div className={`p-2.5 rounded-xl ${bg}`} style={{ color }}>
+      <div className={`p-1.5 sm:p-2.5 rounded-xl ${bg}`} style={{ color }}>
         {icon}
       </div>
     </div>
-    <div>
-      <p className="text-[9px] text-[#94a3b8] uppercase font-bold tracking-widest mb-1">{label}</p>
+    <div className="min-w-0">
+      <p className="text-[8px] sm:text-[9px] text-[#94a3b8] uppercase font-bold tracking-wide sm:tracking-widest mb-1 truncate" title={label}>{label}</p>
       {loading ? (
-        <Skeleton className="h-8 w-16" />
+        <Skeleton className="h-6 sm:h-8 w-12 sm:w-16" />
       ) : (
-        <p className="text-2xl md:text-3xl font-black tracking-tight" style={{ color }}>
+        <p className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight font-sans" style={{ color }}>
           {value}
         </p>
       )}

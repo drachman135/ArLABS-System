@@ -696,7 +696,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </div>
         ) : (
           // RENDER OTHER VIEWS inside clean container
-          <div className="bg-white p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-4 md:mx-6 mb-12">
+          <div className="bg-white p-4 sm:p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-4 md:mx-6 mb-12 w-auto max-w-[calc(100vw-2rem)] md:max-w-full overflow-hidden">
             <div className="flex items-center space-x-4 mb-8">
               <button 
                 onClick={() => handleActionClick('dashboard')} 
