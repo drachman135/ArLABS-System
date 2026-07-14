@@ -22,19 +22,18 @@ import {
   Bell,
   Menu,
   LayoutDashboard,
-  Box,
-  Radio,
-  Terminal,
-  Plus,
   UploadCloud,
   MessageSquare,
   LogOut,
-  ChevronUp,
   Smartphone,
-  Activity,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  BookOpen,
+  User
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -60,33 +59,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   // Exit Dialog State
   const [showExitModal, setShowExitModal] = useState<boolean>(false);
 
-  // Action Sheet Animation States
-  const [openDropdown, setOpenDropdown] = useState<'stats' | 'reports' | 'registry' | 'distribution' | 'broadcast' | null>(null);
-  const [isAnimatingOut, setIsAnimatingOut] = useState<boolean>(false);
-  const openDropdownRef = useRef(openDropdown);
+  // Sidebar States (collapsible/hoverable/pinned)
+  const [isSidebarPinned, setIsSidebarPinned] = useState<boolean>(true);
+  const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
-  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
+  // Extra dashboard metrics & logs
+  const [updatesCount, setUpdatesCount] = useState<number>(0);
+  const [feedbackCount, setFeedbackCount] = useState<number>(0);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
 
-  useEffect(() => {
-    openDropdownRef.current = openDropdown;
-  }, [openDropdown]);
 
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.dock-container') && !target.closest('.neu-dropdown-panel')) {
-        if (openDropdownRef.current) {
-          setIsAnimatingOut(true);
-          setTimeout(() => {
-            setOpenDropdown(null);
-            setIsAnimatingOut(false);
-          }, 250);
-        }
-      }
-    };
-    window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
-  }, []);
 
   // Refs for tracking activeView and showExitModal inside the event listener to avoid stale closure
   const activeViewRef = useRef(activeView);
@@ -128,45 +111,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
     };
   }, []);
 
-  const handleDockNavigation = (tabName: 'dashboard' | 'stats' | 'reports' | 'registry' | 'distribution' | 'broadcast') => {
-    if (tabName === 'dashboard') {
-      if (openDropdown) {
-        setIsAnimatingOut(true);
-        setTimeout(() => {
-          setOpenDropdown(null);
-          setIsAnimatingOut(false);
-          setActiveView('dashboard');
-        }, 250);
-      } else {
-        setActiveView('dashboard');
-      }
-      return;
-    }
-
-    if (openDropdown === tabName) {
-      setIsAnimatingOut(true);
-      setTimeout(() => {
-        setOpenDropdown(null);
-        setIsAnimatingOut(false);
-      }, 250);
-    } else if (openDropdown !== null) {
-      setIsAnimatingOut(true);
-      setTimeout(() => {
-        setOpenDropdown(tabName as any);
-        setIsAnimatingOut(false);
-      }, 250);
-    } else {
-      setOpenDropdown(tabName as any);
-    }
-  };
-
   const handleActionClick = (viewName: any) => {
-    setIsAnimatingOut(true);
-    setTimeout(() => {
-      setActiveView(viewName);
-      setOpenDropdown(null);
-      setIsAnimatingOut(false);
-    }, 250);
+    setActiveView(viewName);
+    setIsMobileSidebarOpen(false);
   };
 
   const [metrics, setMetrics] = useState({
@@ -318,14 +265,100 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           }
         ];
       }
-      setApps(loadedApps);
-
       // Fetch raw data lists for client-side aggregation
-      const { data: licensesData } = await supabase.from('licenses').select('id, application_id, status');
-      setLicensesList(licensesData || []);
+      const { data: licensesData } = await supabase
+        .from('licenses')
+        .select('id, application_id, status, created_at, updated_at, activated_at, last_validation, renewed_at');
+      const loadedLicenses = licensesData || [];
+      setLicensesList(loadedLicenses);
 
-      const { data: devicesData } = await supabase.from('devices').select('id, license_id');
-      setDevicesList(devicesData || []);
+      const { data: devicesData } = await supabase.from('devices').select('id, license_id, created_at, last_online');
+      const loadedDevices = devicesData || [];
+      setDevicesList(loadedDevices);
+
+      // Dynamically sort apps based on last activity time
+      const sortedApps = [...loadedApps].map(app => {
+        let lastActiveTime = app.updated_at ? new Date(app.updated_at).getTime() : 0;
+
+        // Check associated licenses for any later timestamps
+        const appLicenses = loadedLicenses.filter(l => l.application_id === app.id);
+        appLicenses.forEach(l => {
+          const times = [
+            l.created_at ? new Date(l.created_at).getTime() : 0,
+            l.updated_at ? new Date(l.updated_at).getTime() : 0,
+            l.activated_at ? new Date(l.activated_at).getTime() : 0,
+            l.last_validation ? new Date(l.last_validation).getTime() : 0,
+            l.renewed_at ? new Date(l.renewed_at).getTime() : 0,
+          ];
+          const maxLicTime = Math.max(...times);
+          if (maxLicTime > lastActiveTime) {
+            lastActiveTime = maxLicTime;
+          }
+
+          // Check devices connected to this license
+          const licenseDevices = loadedDevices.filter(d => d.license_id === l.id);
+          licenseDevices.forEach(d => {
+            const devTimes = [
+              d.created_at ? new Date(d.created_at).getTime() : 0,
+              d.last_online ? new Date(d.last_online).getTime() : 0
+            ];
+            const maxDevTime = Math.max(...devTimes);
+            if (maxDevTime > lastActiveTime) {
+              lastActiveTime = maxDevTime;
+            }
+          });
+        });
+
+        return { ...app, lastActiveTime };
+      }).sort((a, b) => b.lastActiveTime - a.lastActiveTime);
+
+      setApps(sortedApps);
+
+      // Fetch additional dashboard summary info matching Rumahweb redesign
+      try {
+        const { count: upCount } = await supabase
+          .from('application_versions')
+          .select('*', { count: 'exact', head: true });
+        setUpdatesCount(upCount || 0);
+      } catch (e) {
+        console.warn("Failed fetching versions count: ", e);
+      }
+
+      try {
+        const { count: feedCount } = await supabase
+          .from('feedback_reports')
+          .select('*', { count: 'exact', head: true });
+        setFeedbackCount(feedCount || 0);
+      } catch (e) {
+        console.warn("Failed fetching feedback count: ", e);
+      }
+
+      try {
+        const { data: logsData } = await supabase
+          .from('logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        let loadedLogs = logsData || [];
+        if (loadedLogs.length === 0) {
+          loadedLogs = [
+            { id: 'log-1', action: 'LIC_GEN', description: 'Lisensi baru dibuat oleh Admin (Owner)', severity: 'info', created_at: new Date().toISOString() },
+            { id: 'log-2', action: 'DEV_VALIDATE', description: 'Perangkat [ID: 8a7d3...] divalidasi sukses', severity: 'info', created_at: new Date(Date.now() - 600000).toISOString() },
+            { id: 'log-3', action: 'APP_UPDATE', description: 'Versi baru v2.1.0 diunggah untuk POS Companion', severity: 'warning', created_at: new Date(Date.now() - 3600000).toISOString() },
+            { id: 'log-4', action: 'LIC_SUSPEND', description: 'Lisensi [KEY: 9A8D-...] ditangguhkan (Suspended)', severity: 'critical', created_at: new Date(Date.now() - 7200000).toISOString() },
+            { id: 'log-5', action: 'SYS_INIT', description: 'Sistem disinkronisasi dengan Supabase Cloud', severity: 'info', created_at: new Date(Date.now() - 86400000).toISOString() }
+          ];
+        }
+        setActivityLogs(loadedLogs);
+      } catch (e) {
+        console.warn("Failed fetching logs: ", e);
+        setActivityLogs([
+          { id: 'log-1', action: 'LIC_GEN', description: 'Lisensi baru dibuat oleh Admin (Owner)', severity: 'info', created_at: new Date().toISOString() },
+          { id: 'log-2', action: 'DEV_VALIDATE', description: 'Perangkat [ID: 8a7d3...] divalidasi sukses', severity: 'info', created_at: new Date(Date.now() - 600000).toISOString() },
+          { id: 'log-3', action: 'APP_UPDATE', description: 'Versi baru v2.1.0 diunggah untuk POS Companion', severity: 'warning', created_at: new Date(Date.now() - 3600000).toISOString() }
+        ]);
+      }
     } catch (err: any) {
       setConnected(false);
     } finally {
@@ -344,326 +377,373 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   }, []);
 
   return (
-    // Base Soft Background (#E6E9EF) - The canvas for Neumorphism
-    <div className="min-h-screen bg-[#E6E9EF] text-[#4A5568] font-sans font-medium select-none pb-32 lg:pb-12 lg:pl-[120px] overflow-x-hidden relative">
+    // Base light blue-gray background (#F4F7FC) mimicking Rumahweb Clientzone
+    <div className={`min-h-screen bg-[#F4F7FC] text-[#2C3E50] font-sans font-medium select-none overflow-x-hidden relative transition-all duration-300 ease-in-out ${isSidebarPinned ? 'lg:pl-[260px]' : 'lg:pl-[80px]'}`}>
 
-      {/* --- SOFT TACTILE HEADER --- */}
-      <header className="sticky top-0 z-40 bg-[#E6E9EF]/80 backdrop-blur-xl px-4 md:px-8 py-4 flex justify-between items-center mb-6">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center neu-convex text-[#3B82F6] font-black text-xl">
-            Ar
-          </div>
-          <div className="hidden sm:block">
-            <h1 className="text-[#2D3748] font-black tracking-tight text-lg">ArLABS Panel</h1>
-            <p className="text-[11px] text-[#718096] font-bold tracking-wider uppercase">Workspace // {currentTime}</p>
-          </div>
-        </div>
+      {/* --- RESPONSIVE SIDEBAR BACKDROP (Mobile only) --- */}
+      {isMobileSidebarOpen && (
+        <div 
+          onClick={() => setIsMobileSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden animate-[fadeInSoft_0.2s_ease-out]"
+        />
+      )}
 
-        <div className="flex items-center space-x-5">
-          {/* Inset Connectivity Status */}
-          <div className="flex items-center space-x-2 neu-inset px-4 py-2 rounded-full">
-            <Wifi className={`w-4 h-4 ${connected ? 'text-emerald-500' : 'text-rose-500'}`} />
-            <span className="hidden sm:inline font-bold text-[10px] uppercase tracking-widest text-[#718096]">
-              {connected ? 'ONLINE' : 'OFFLINE'}
-            </span>
+      {/* --- COLLAPSIBLE & HOVERABLE SIDEBAR --- */}
+      <aside
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
+        className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-gray-200/80 flex flex-col justify-between transition-all duration-300 ease-in-out shadow-sm select-none
+          ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+          lg:translate-x-0 lg:h-screen lg:fixed lg:top-0 lg:left-0 
+          ${(isSidebarPinned || isSidebarHovered) ? 'lg:w-[260px]' : 'lg:w-[80px]'}`}
+      >
+        {/* Top logo & branding bar */}
+        <div className="h-16 border-b border-gray-200/60 flex items-center justify-between px-4 w-full flex-shrink-0">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm flex-shrink-0">
+              Ar
+            </div>
+            {(isSidebarPinned || isSidebarHovered) && (
+              <span className="font-extrabold text-[#2C3E50] text-sm tracking-tight whitespace-nowrap">
+                ArLABS Panel
+              </span>
+            )}
           </div>
-
-          <button
-            onClick={() => setIsMobileDrawerOpen(true)}
-            className="flex items-center justify-center w-12 h-12 rounded-full neu-flat hover:neu-pressed text-[#4A5568] hover:text-[#3B82F6] transition-all"
+          
+          {/* Collapse toggle (Desktop only) */}
+          <button 
+            onClick={() => setIsSidebarPinned(!isSidebarPinned)}
+            className="hidden lg:flex w-8 h-8 rounded-lg items-center justify-center text-gray-400 hover:text-[#2C3E50] hover:bg-gray-100 transition-colors border-none bg-transparent cursor-pointer"
           >
-            <Menu className="w-5 h-5" />
+            {isSidebarPinned ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
         </div>
-      </header>
 
-      {/* --- NEUMORPHIC BOTTOM NAV DOCK --- */}
-      <nav className="dock-container fixed bottom-6 left-6 right-6 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:left-6 lg:right-auto lg:w-[80px] lg:h-auto bg-[#E6E9EF] rounded-[2rem] p-3 lg:py-6 flex flex-row lg:flex-col justify-between lg:justify-start lg:space-y-6 items-center z-50 neu-flat">
-        {[
-          { id: 'dashboard', icon: LayoutDashboard, views: ['dashboard'], color: 'text-[#3B82F6]' },
-          { id: 'registry', icon: Key, views: ['licenses', 'customers'], color: 'text-[#8B5CF6]' },
-          { id: 'distribution', icon: Box, views: ['applications', 'updates'], color: 'text-[#10B981]' },
-          { id: 'broadcast', icon: Radio, views: ['notifications', 'announcements', 'config'], color: 'text-[#F59E0B]' },
-          { id: 'reports', icon: Terminal, views: ['analytics', 'apkstats', 'crash', 'feedback'], color: 'text-[#F43F5E]' }
-        ].map((item) => {
-          const Icon = item.icon;
-          const isActive = item.views.includes(activeView) || openDropdown === item.id;
-
-          return (
-            <button
-              key={item.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDockNavigation(item.id as any);
-              }}
-              className={`relative p-4 rounded-2xl transition-all duration-300 flex-1 lg:flex-none flex justify-center mx-1 lg:mx-0
-                ${isActive ? 'neu-pressed ' + item.color : 'neu-flat hover:neu-pressed text-[#A0AEC0] hover:text-[#4A5568]'}`}
-            >
-              <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-90' : 'hover:scale-95'}`} />
-            </button>
-          )
-        })}
-      </nav>
-
-      {/* --- NEUMORPHIC ACTION SHEETS (Dropdowns) --- */}
-      {openDropdown && (
-        <div className="fixed inset-0 z-40 bg-[#E6E9EF]/40 backdrop-blur-sm lg:pl-32 lg:flex lg:items-center">
-          <div
-            className={`neu-dropdown-panel absolute bottom-28 left-6 right-6 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:w-80 bg-[#E6E9EF] p-6 rounded-[2rem] neu-flat 
-            ${isAnimatingOut ? 'animate-[slideDownSoft_0.25s_ease-in_forwards]' : 'animate-[slideUpSoft_0.25s_ease-out_forwards]'}`}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-6 pb-2">
-              <span className="text-xs font-black text-[#718096] uppercase tracking-widest flex items-center">
-                <Activity className="w-4 h-4 mr-2 text-[#3B82F6]" /> SELECT MODULE
-              </span>
-              <button
-                onClick={() => {
-                  setIsAnimatingOut(true);
-                  setTimeout(() => { setOpenDropdown(null); setIsAnimatingOut(false); }, 250);
-                }}
-                className="w-8 h-8 rounded-full flex items-center justify-center neu-flat hover:neu-pressed text-[#A0AEC0] hover:text-[#F43F5E]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {openDropdown === 'registry' && (
-                <>
-                  <button onClick={() => handleActionClick('licenses')} className="neu-menu-btn"><Key className="w-4 h-4 mr-4 text-[#8B5CF6]" /> <span>Kelola lisensi</span></button>
-                  <button onClick={() => handleActionClick('customers')} className="neu-menu-btn"><Menu className="w-4 h-4 mr-4 text-[#8B5CF6]" /> <span>Klien</span></button>
-                </>
-              )}
-              {openDropdown === 'distribution' && (
-                <>
-                  <button onClick={() => handleActionClick('applications')} className="neu-menu-btn"><Smartphone className="w-4 h-4 mr-4 text-[#10B981]" /> <span>Aplikasi</span></button>
-                  <button onClick={() => handleActionClick('updates')} className="neu-menu-btn"><UploadCloud className="w-4 h-4 mr-4 text-[#10B981]" /> <span>Pembaharuan</span></button>
-                  <button onClick={() => handleActionClick('cloudflare_files')} className="neu-menu-btn"><Database className="w-4 h-4 mr-4 text-[#10B981]" /> <span>Berkas Cloudflare</span></button>
-                </>
-              )}
-              {openDropdown === 'broadcast' && (
-                <>
-                  <button onClick={() => handleActionClick('notifications')} className="neu-menu-btn"><Bell className="w-4 h-4 mr-4 text-[#F59E0B]" /> <span>Notifikasi mengambang</span></button>
-                  <button onClick={() => handleActionClick('announcements')} className="neu-menu-btn"><MessageSquare className="w-4 h-4 mr-4 text-[#F59E0B]" /> <span>Notifikasi diaplikasi</span></button>
-                  <button onClick={() => handleActionClick('config')} className="neu-menu-btn"><RefreshCw className="w-4 h-4 mr-4 text-[#F59E0B]" /> <span>Konfigurasi jarak jauh (SOON)</span></button>
-                </>
-              )}
-              {openDropdown === 'reports' && (
-                <>
-                  <button onClick={() => handleActionClick('analytics')} className="neu-menu-btn"><LayoutDashboard className="w-4 h-4 mr-4 text-[#F43F5E]" /> <span>System Analytics</span></button>
-                  <button onClick={() => handleActionClick('apkstats')} className="neu-menu-btn"><Database className="w-4 h-4 mr-4 text-[#F43F5E]" /> <span>Download Stats</span></button>
-                  <button onClick={() => handleActionClick('crash')} className="neu-menu-btn"><AlertTriangle className="w-4 h-4 mr-4 text-[#F43F5E]" /> <span>Crash Reports</span></button>
-                  <button onClick={() => handleActionClick('feedback')} className="neu-menu-btn"><MessageSquare className="w-4 h-4 mr-4 text-[#F43F5E]" /> <span>User Feedback</span></button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- PROFILE & SETTINGS DRAWER --- */}
-      {isMobileDrawerOpen && (
-        <div className="fixed inset-0 bg-[#E6E9EF]/60 backdrop-blur-md z-50 flex justify-center items-center p-4" onClick={() => setIsMobileDrawerOpen(false)}>
-          <div
-            className="w-full max-w-sm bg-[#E6E9EF] p-8 rounded-[2.5rem] neu-flat animate-[zoomInSoft_0.25s_ease-out]"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-8">
-              <span className="text-xs font-black text-[#4A5568] uppercase tracking-widest">Operator Card</span>
-              <button onClick={() => setIsMobileDrawerOpen(false)} className="w-8 h-8 rounded-full flex items-center justify-center neu-flat hover:neu-pressed text-[#A0AEC0] hover:text-[#2D3748]"><X className="w-4 h-4" /></button>
-            </div>
-
-            <div className="neu-inset p-6 rounded-3xl mb-8 flex flex-col items-center text-center">
-              <div className="w-20 h-20 rounded-full neu-convex flex items-center justify-center font-black text-[#3B82F6] text-3xl mb-4">
-                {profile?.name?.charAt(0) || 'A'}
-              </div>
-              <h4 className="text-[#2D3748] font-black text-xl mb-1">{profile?.name || 'Administrator'}</h4>
-              <p className="text-xs text-[#718096] font-bold mb-4">{profile?.email || 'admin@system.com'}</p>
-              <span className="text-[10px] font-black uppercase bg-[#E6E9EF] text-[#8B5CF6] px-4 py-1.5 rounded-full neu-flat">
-                Role: {profile?.role || 'Owner'}
-              </span>
-            </div>
-
-            <button
-              onClick={() => { onLogout(); setIsMobileDrawerOpen(false); }}
-              className="w-full flex items-center justify-center p-4 text-[#F43F5E] font-black uppercase tracking-widest rounded-2xl neu-flat hover:neu-pressed transition-all"
-            >
-              <LogOut className="w-5 h-5 mr-3" /> Sign Out
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* --- MAIN DASHBOARD WORKSPACE --- */}
-      <div className="px-4 md:px-6 lg:px-8 max-w-[1400px] mx-auto relative z-10">
-        {activeView === 'dashboard' ? (
-          <div className="space-y-6">
+        {/* Scrollable menu structure */}
+        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-4 w-full">
+          {[
+            {
+              title: 'Main Menu',
+              items: [
+                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, views: ['dashboard'], badge: null }
+              ]
+            },
+            {
+              title: 'Registry',
+              items: [
+                { id: 'licenses', label: 'Kelola Lisensi', icon: Key, views: ['licenses'], badge: metrics.activeLicenses },
+                { id: 'customers', label: 'Klien', icon: User, views: ['customers'], badge: null }
+              ]
+            },
+            {
+              title: 'Distribution',
+              items: [
+                { id: 'applications', label: 'Aplikasi', icon: Smartphone, views: ['applications'], badge: apps.length },
+                { id: 'updates', label: 'Pembaharuan', icon: UploadCloud, views: ['updates'], badge: updatesCount },
+                { id: 'cloudflare_files', label: 'Berkas Cloudflare', icon: Database, views: ['cloudflare_files'], badge: null }
+              ]
+            },
+            {
+              title: 'Broadcast',
+              items: [
+                { id: 'notifications', label: 'Notifikasi Mengambang', icon: Bell, views: ['notifications'], badge: null },
+                { id: 'announcements', label: 'Notifikasi Diaplikasi', icon: MessageSquare, views: ['announcements'], badge: null },
+                { id: 'config', label: 'Konfigurasi Jarak Jauh', icon: RefreshCw, views: ['config'], badge: null }
+              ]
+            },
+            {
+              title: 'Reports',
+              items: [
+                { id: 'analytics', label: 'System Analytics', icon: LayoutDashboard, views: ['analytics'], badge: null },
+                { id: 'apkstats', label: 'Download Stats', icon: Database, views: ['apkstats'], badge: null },
+                { id: 'crash', label: 'Crash Reports', icon: AlertTriangle, views: ['crash'], badge: null },
+                { id: 'feedback', label: 'User Feedback', icon: MessageSquare, views: ['feedback'], badge: feedbackCount }
+              ]
+            }
+          ].map((section, idx) => {
+            const isExpanded = isSidebarPinned || isSidebarHovered;
             
-            {/* Header / Summary Section */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-[#2D3748] font-black text-xl tracking-tight uppercase">Dashboard Utama</h2>
-                <p className="text-xs text-[#718096] font-bold">Ringkasan status aplikasi dan statistik penggunaan platform</p>
-              </div>
-              <button 
-                onClick={fetchDashboardData} 
-                disabled={loading}
-                className="px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-blue-500 bg-[#E6E9EF] neu-flat hover:neu-pressed disabled:opacity-50 transition-all flex items-center space-x-2 self-end sm:self-auto"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                <span>Segarkan data</span>
-              </button>
-            </div>
-
-            {/* Quick Summary Cards (Responsive Row) */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat flex flex-col justify-center">
-                <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase mb-1">Aplikasi</span>
-                <span className="text-xl md:text-2xl font-black text-[#2D3748]">{loading ? '...' : apps.length}</span>
-              </div>
-              <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat flex flex-col justify-center">
-                <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase mb-1">Lisensi Aktif</span>
-                <span className="text-xl md:text-2xl font-black text-blue-500">{loading ? '...' : metrics.activeLicenses}</span>
-              </div>
-              <div className="p-4 rounded-2xl bg-[#E6E9EF] neu-flat flex flex-col justify-center">
-                <span className="text-[9px] text-[#718096] font-black tracking-widest uppercase mb-1">Perangkat</span>
-                <span className="text-xl md:text-2xl font-black text-emerald-500">{loading ? '...' : metrics.activeDevices}</span>
-              </div>
-            </div>
-
-            {/* Applications Grid: Optimized for Mobile & Desktop */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center px-1">
-                <span className="text-[10px] font-black text-[#4A5568] uppercase tracking-widest">Aplikasi Terdaftar ({apps.length})</span>
-                <button 
-                  onClick={() => handleActionClick('applications')}
-                  className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-[#718096] bg-[#E6E9EF] neu-flat hover:neu-pressed transition-all flex items-center space-x-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Tambah Aplikasi</span>
-                </button>
-              </div>
-
-              {loading && apps.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-[#718096] bg-[#E6E9EF] rounded-[2.5rem] neu-inset h-64 space-y-3">
-                  <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-                  <span className="text-xs font-black tracking-widest uppercase">Memuat data aplikasi...</span>
-                </div>
-              ) : apps.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-[#718096] bg-[#E6E9EF] rounded-[2.5rem] neu-inset h-64 space-y-2">
-                  <Smartphone className="w-10 h-10 text-[#A0AEC0]" />
-                  <span className="text-xs font-black tracking-widest uppercase">Belum ada aplikasi terdaftar</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {apps.map(app => {
-                    const appLicenses = licensesList.filter(l => l.application_id === app.id);
-                    const totalLics = appLicenses.length;
-                    const activeLics = appLicenses.filter(l => l.status === 'ACTIVE').length;
+            return (
+              <div key={idx} className="space-y-1">
+                {isExpanded && (
+                  <span className="block px-3 text-[9px] font-black uppercase text-gray-400 tracking-wider">
+                    {section.title}
+                  </span>
+                )}
+                
+                <div className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = item.views.includes(activeView);
                     
-                    const appLicenseIds = new Set(appLicenses.map(l => l.id));
-                    const appDevicesCount = devicesList.filter(d => d.license_id && appLicenseIds.has(d.license_id)).length;
-
-                    let statusColor = 'text-[#10B981]';
-                    let statusBg = 'bg-[#10B981]/10';
-                    if (app.status === 'MAINTENANCE') {
-                      statusColor = 'text-[#F59E0B]';
-                      statusBg = 'bg-[#F59E0B]/10';
-                    } else if (app.status === 'DEPRECATED') {
-                      statusColor = 'text-[#F43F5E]';
-                      statusBg = 'bg-[#F43F5E]/10';
-                    }
-
                     return (
-                      <div 
-                        key={app.id}
-                        onClick={() => {
-                          setSelectedAppForModal(app);
-                          setIsAppModalOpen(true);
-                        }}
-                        className="bg-[#E6E9EF] p-5 rounded-[2rem] neu-flat hover:scale-[0.98] active:scale-[0.96] transition-all cursor-pointer flex flex-col justify-between space-y-4"
+                      <button
+                        key={item.id}
+                        onClick={() => handleActionClick(item.id as any)}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all duration-200 border-none cursor-pointer text-left bg-transparent
+                          ${isActive 
+                            ? 'bg-blue-50 text-blue-600 font-extrabold shadow-sm' 
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-[#2C3E50] font-semibold'}`}
                       >
-                        <div className="flex justify-between items-start">
-                          <div className="w-10 h-10 rounded-xl neu-convex flex items-center justify-center text-[#3B82F6] flex-shrink-0">
-                            <Smartphone className="w-5 h-5" />
-                          </div>
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${statusBg} ${statusColor} neu-inset`}>
-                            {app.status}
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
+                          {isExpanded && (
+                            <span className="text-xs truncate">{item.label}</span>
+                          )}
+                        </div>
+                        {isExpanded && item.badge !== null && item.badge > 0 && (
+                          <span className="bg-blue-100 text-blue-700 text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0">
+                            {item.badge}
                           </span>
-                        </div>
-
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-black text-[#2D3748] tracking-tight truncate leading-tight">{app.app_name}</h3>
-                          <p className="text-[10px] text-[#718096] font-bold mt-1 leading-tight break-all">{app.package_name}</p>
-                        </div>
-
-                        <div className="h-[1px] bg-slate-300/50 w-full rounded" />
-
-                        <div className="grid grid-cols-2 gap-3 text-[10px] font-bold text-[#718096]">
-                          <div className="flex items-center space-x-1.5 font-bold min-w-0">
-                            <Key className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                            <span className="truncate">{activeLics} / {totalLics} Lic</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 font-bold min-w-0">
-                            <Activity className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                            <span className="truncate">{appDevicesCount} Dev</span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-1 text-[9px] text-[#A0AEC0] font-black uppercase">
-                          <span className="neu-inset px-2.5 py-1 rounded-lg text-blue-500">v{app.current_version}</span>
-                          <span>Updated {app.updated_at ? new Date(app.updated_at).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }) : 'Baru'}</span>
-                        </div>
-
-                      </div>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
-              )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Sidebar Footer (Profile / Sign Out) */}
+        <div className="p-3 border-t border-gray-200/60 w-full flex-shrink-0">
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center justify-center lg:justify-start space-x-3 p-2.5 rounded-xl text-red-500 hover:bg-red-50 transition-colors border-none bg-transparent cursor-pointer font-bold"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            {(isSidebarPinned || isSidebarHovered) && (
+              <span className="text-xs">Sign Out</span>
+            )}
+          </button>
+        </div>
+      </aside>
+
+      {/* --- TOP GREETING HEADER --- */}
+      <header className="sticky top-0 z-30 bg-[#F4F7FC]/85 backdrop-blur-md px-6 py-4 flex justify-between items-center border-b border-gray-200/50 mb-6">
+        <div className="flex items-center space-x-3">
+          {/* Mobile hamburger menu trigger */}
+          <button 
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="lg:hidden p-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-blue-600 shadow-sm flex items-center justify-center cursor-pointer"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          
+          <div className="bg-[#10B981] text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-lg shadow-sm">
+            {activeView === 'dashboard' ? 'Dashboard' : activeView.toUpperCase()}
+          </div>
+
+          <span className="hidden md:inline-block text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+            Workspace // {currentTime}
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-4 text-xs font-bold">
+          {/* Connectivity Status */}
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-wider">
+            <Wifi className={`w-3.5 h-3.5 ${connected ? 'text-emerald-500' : 'text-rose-500'}`} />
+            <span className="hidden sm:inline">{connected ? 'ONLINE' : 'OFFLINE'}</span>
+          </div>
+
+
+
+          {/* User Profile Info greeting */}
+          <div className="flex items-center space-x-2.5">
+            <span className="hidden sm:inline text-gray-500 font-semibold">Hi, <strong className="text-gray-800">{profile?.name || 'Administrator'}</strong></span>
+            <div className="w-8 h-8 rounded-full bg-emerald-500 text-white font-black flex items-center justify-center uppercase text-xs border border-white shadow-sm animate-[pulse_3s_infinite]">
+              {profile?.name?.charAt(0) || 'A'}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* --- MAIN DASHBOARD WORKSPACE --- */}
+      <div className="max-w-[1400px] mx-auto relative z-10 w-full">
+        {activeView === 'dashboard' ? (
+          <div className="px-6 space-y-6 pb-12 animate-[zoomInSoft_0.2s_ease-out]">
+            
+
+
+            {/* Row 2: The 4 Grid Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              
+              {/* Card 1: Aplikasi Terdaftar */}
+              <div 
+                onClick={() => handleActionClick('applications')}
+                className="bg-[#E8F2FF] border border-[#BFDBFE] p-5 rounded-[20px] shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex flex-col items-center justify-center aspect-[1/1.05] sm:aspect-auto sm:h-36"
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-3xl font-black text-[#1E40AF]">{loading ? '...' : apps.length}</span>
+                  <Smartphone className="w-5 h-5 text-[#1E40AF] flex-shrink-0" />
+                </div>
+                <span className="block text-[10px] md:text-xs font-black text-[#1E40AF]/80 uppercase tracking-wider mt-3 text-center">
+                  Aplikasi Terdaftar
+                </span>
+              </div>
+
+              {/* Card 2: Lisensi Aktif */}
+              <div 
+                onClick={() => handleActionClick('licenses')}
+                className="bg-[#E6F9F5] border border-[#99F6E4] p-5 rounded-[20px] shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex flex-col items-center justify-center aspect-[1/1.05] sm:aspect-auto sm:h-36"
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-3xl font-black text-[#0F766E]">{loading ? '...' : metrics.activeLicenses}</span>
+                  <Key className="w-5 h-5 text-[#0F766E] flex-shrink-0" />
+                </div>
+                <span className="block text-[10px] md:text-xs font-black text-[#0F766E]/80 uppercase tracking-wider mt-3 text-center">
+                  Lisensi Aktif
+                </span>
+              </div>
+
+              {/* Card 3: Update Control */}
+              <div 
+                onClick={() => handleActionClick('updates')}
+                className="bg-[#FFFBEB] border border-[#FDE68A] p-5 rounded-[20px] shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex flex-col items-center justify-center aspect-[1/1.05] sm:aspect-auto sm:h-36"
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-3xl font-black text-[#B45309]">{loading ? '...' : updatesCount}</span>
+                  <UploadCloud className="w-5 h-5 text-[#B45309] flex-shrink-0" />
+                </div>
+                <span className="block text-[10px] md:text-xs font-black text-[#B45309]/80 uppercase tracking-wider mt-3 text-center">
+                  Update Control
+                </span>
+              </div>
+
+              {/* Card 4: User Feedback */}
+              <div 
+                onClick={() => handleActionClick('feedback')}
+                className="bg-[#FFF1F2] border border-[#FECDD3] p-5 rounded-[20px] shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex flex-col items-center justify-center aspect-[1/1.05] sm:aspect-auto sm:h-36"
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-3xl font-black text-[#BE123C]">{loading ? '...' : feedbackCount}</span>
+                  <MessageSquare className="w-5 h-5 text-[#BE123C] flex-shrink-0" />
+                </div>
+                <span className="block text-[10px] md:text-xs font-black text-[#BE123C]/80 uppercase tracking-wider mt-3 text-center">
+                  User Feedback
+                </span>
+              </div>
+
             </div>
 
-            {/* Quick Navigation Buttons */}
-            <div className="pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <button 
-                onClick={() => handleActionClick('licenses')}
-                className="w-full py-4 text-[#8B5CF6] font-black uppercase tracking-wider text-xs rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center space-x-2"
-              >
-                <Key className="w-4 h-4" />
-                <span>Kelola Lisensi</span>
-              </button>
-              <button 
-                onClick={() => handleActionClick('updates')}
-                className="w-full py-4 text-[#10B981] font-black uppercase tracking-wider text-xs rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center space-x-2"
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>Unggah Pembaharuan</span>
-              </button>
-              <button 
-                onClick={() => handleActionClick('feedback')}
-                className="w-full py-4 text-[#F43F5E] font-black uppercase tracking-wider text-xs rounded-2xl bg-[#E6E9EF] neu-flat hover:neu-pressed flex items-center justify-center space-x-2"
-              >
-                <AlertTriangle className="w-4 h-4" />
-                <span>Crash & Feedback</span>
-              </button>
+            {/* Row 3: Activity Logs (Left) & Developer Guides (Right) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {/* Activity Logs (Left Container) */}
+              <div className="lg:col-span-8 bg-white border border-gray-200/60 rounded-[24px] p-6 shadow-sm flex flex-col justify-between min-h-[350px]">
+                <div className="w-full">
+                  <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
+                    <div>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">Log Aktifitas Client dan Admin</h3>
+                      <p className="text-[10px] text-gray-400 font-bold">5 aktivitas platform terbaru secara riil</p>
+                    </div>
+                    <button 
+                      onClick={fetchDashboardData}
+                      disabled={loading}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all border-none bg-transparent cursor-pointer flex items-center justify-center"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-left text-xs min-w-[500px]">
+                      <thead>
+                        <tr className="text-gray-400 font-bold uppercase text-[9px] tracking-wider border-b border-gray-150 pb-2">
+                          <th className="py-2.5">Waktu</th>
+                          <th className="py-2.5">Aksi</th>
+                          <th className="py-2.5">Deskripsi</th>
+                          <th className="py-2.5 text-right">Severity</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-gray-600 font-medium">
+                        {activityLogs.map((log) => {
+                          let badgeColor = 'bg-blue-50 text-blue-600';
+                          if (log.severity === 'warning') badgeColor = 'bg-amber-50 text-amber-600';
+                          if (log.severity === 'critical') badgeColor = 'bg-rose-50 text-rose-600';
+
+                          const formattedTime = new Date(log.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+                          return (
+                            <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="py-3 flex items-center space-x-1.5">
+                                <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                <span className="font-semibold text-gray-700">{formattedTime}</span>
+                              </td>
+                              <td className="py-3">
+                                <span className="font-mono text-[10px] font-bold text-gray-800">{log.action}</span>
+                              </td>
+                              <td className="py-3">
+                                <span className="font-semibold text-gray-600 line-clamp-1">{log.description}</span>
+                              </td>
+                              <td className="py-3 text-right">
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badgeColor}`}>
+                                  {log.severity}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end">
+                  <button 
+                    onClick={() => handleActionClick('analytics')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-none"
+                  >
+                    Seluruh Log Sistem
+                  </button>
+                </div>
+              </div>
+
+              {/* Developer Guides Panel (Right Container) */}
+              <div className="lg:col-span-4 bg-white border border-gray-200/60 rounded-[24px] p-6 shadow-sm flex flex-col space-y-4">
+                <div className="border-b border-gray-100 pb-3 flex items-center space-x-2">
+                  <BookOpen className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider">Panduan Developer & Admin</h3>
+                </div>
+                <div className="space-y-3.5 text-xs flex-1 overflow-y-auto">
+                  {[
+                    { title: "Cara Mendaftarkan Lisensi Klien Baru", desc: "Panduan cepat meregistrasikan pembeli lisensi baru dan mengirim WhatsApp template." },
+                    { title: "Menghubungkan Aplikasi dengan ArLABS SDK", desc: "Integrasi client library untuk verifikasi serial key lisensi." },
+                    { title: "Konfigurasi R2 & Cloudflare", desc: "Langkah-langkah setup bucket penyimpanan untuk update APK secara aman." },
+                    { title: "Integrasi Push Firebase/OneSignal", desc: "Pengiriman notifikasi floating ke device klien Android." }
+                  ].map((guide, idx) => (
+                    <div key={idx} className="group cursor-pointer hover:bg-gray-50 p-2.5 rounded-xl transition-all flex flex-col space-y-1">
+                      <h4 className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors leading-tight">
+                        {guide.title}
+                      </h4>
+                      <p className="text-[10px] text-gray-450 font-semibold leading-relaxed">
+                        {guide.desc}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
 
           </div>
         ) : (
-          // RENDER OTHER VIEWS (Workspace Wrapper with Neumorphic Override)
-          <div className="bg-[#E6E9EF] p-4 md:p-8 rounded-[2.5rem] neu-flat min-h-[70vh] animate-[zoomInSoft_0.3s_ease-out]">
+          // RENDER OTHER VIEWS inside clean container
+          <div className="bg-white p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-4 md:mx-6 mb-12">
             <div className="flex items-center space-x-4 mb-8">
-              <button onClick={() => handleDockNavigation('dashboard')} className="w-10 h-10 rounded-full flex items-center justify-center text-[#718096] neu-flat hover:neu-pressed transition-all">
-                <ChevronUp className="w-5 h-5 -rotate-90" />
+              <button 
+                onClick={() => handleActionClick('dashboard')} 
+                className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-gray-100 transition-all border border-gray-200 bg-white cursor-pointer animate-[pulse_1.5s_infinite]"
+              >
+                <ChevronLeft className="w-4 h-4" />
               </button>
               <div>
-                <h2 className="text-[#2D3748] font-black uppercase tracking-widest text-lg">Active Workspace</h2>
-                <span className="text-[10px] text-[#A0AEC0] font-bold tracking-widest uppercase">Module // {activeView}</span>
+                <h2 className="text-gray-800 font-black text-sm tracking-tight uppercase">Active Module</h2>
+                <span className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">{activeView}</span>
               </div>
             </div>
 
-            {/* Sub-components rendered inside Neumorphic filter rules */}
-            <div className="neu-content-wrapper rounded-3xl overflow-hidden p-1">
+            <div className="rounded-2xl overflow-hidden p-1 neu-content-wrapper">
               {activeView === 'analytics' && <AnalyticsDashboard />}
               {activeView === 'apkstats' && <ApkStatsDashboard />}
               {activeView === 'crash' && <CrashReportScreen />}

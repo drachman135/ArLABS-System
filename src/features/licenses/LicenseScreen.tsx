@@ -126,6 +126,7 @@ export const LicenseScreen: React.FC = () => {
   // Filter State
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [packageFilter, setPackageFilter] = useState<string>('ALL');
 
   // Detail Modal state
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
@@ -532,7 +533,9 @@ export const LicenseScreen: React.FC = () => {
       (typeFilter === '365_DAYS' && (lType === '365_DAYS' || lType === '1_YEAR')) ||
       (typeFilter === 'CUSTOM' && lType === 'CUSTOM');
 
-    return matchesSearch && matchesStatus && matchesType;
+    const matchesPackage = packageFilter === 'ALL' || (lic.applications && lic.applications.package_name === packageFilter);
+
+    return matchesSearch && matchesStatus && matchesType && matchesPackage;
   });
 
   return (
@@ -557,6 +560,20 @@ export const LicenseScreen: React.FC = () => {
               className="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] placeholder:text-[#64748B]/60 focus:outline-none focus:border-[#0EA5E9] focus:ring-1 focus:ring-[#0EA5E9] transition-all duration-300 w-full sm:w-40 shadow-sm"
             />
           </div>
+
+          {/* Package Filter */}
+          <select
+            value={packageFilter}
+            onChange={(e) => setPackageFilter(e.target.value)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer max-w-[150px] truncate"
+          >
+            <option value="ALL">All Packages</option>
+            {appsList.map((app) => (
+              <option key={app.id} value={app.package_name}>
+                {app.app_name}
+              </option>
+            ))}
+          </select>
 
           {/* Type Filter */}
           <select
