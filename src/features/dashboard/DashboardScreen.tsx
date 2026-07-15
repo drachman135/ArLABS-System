@@ -13,6 +13,7 @@ import { CrashReportScreen } from '../crash/CrashReportScreen';
 import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
 import { CloudflareFileManagerScreen } from '../updates/CloudflareFileManagerScreen';
 import { ProductManagementScreen } from '../products/ProductManagementScreen';
+import { AddSkuModal } from '../products/AddSkuModal';
 import {
   RefreshCw,
   Wifi,
@@ -35,7 +36,8 @@ import {
   Clock,
   BookOpen,
   User,
-  Package
+  Package,
+  Plus
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -74,6 +76,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   const [updatesCount, setUpdatesCount] = useState<number>(0);
   const [feedbackCount, setFeedbackCount] = useState<number>(0);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
+
+  // Global Add SKU Modal State
+  const [isSkuModalOpen, setIsSkuModalOpen] = useState(false);
+  const [productRefreshKey, setProductRefreshKey] = useState(0);
 
 
 
@@ -505,7 +511,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </span>
         </div>
 
-        <div className="flex items-center space-x-4 text-xs font-bold">
+        <div className="flex items-center space-x-3 sm:space-x-4 text-xs font-bold">
+          {/* Add SKU Global Button */}
+          <button
+            onClick={() => setIsSkuModalOpen(true)}
+            className="flex items-center space-x-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-full shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 border-none cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 text-white" />
+            <span>+ SKU</span>
+          </button>
+
           {/* Connectivity Status */}
           <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gray-100 border border-gray-200 text-gray-500 text-[10px] font-black uppercase tracking-wider">
             <Wifi className={`w-3.5 h-3.5 ${connected ? 'text-emerald-500' : 'text-rose-500'}`} />
@@ -733,7 +748,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               {activeView === 'feedback' && <FeedbackCenterScreen session={session} profile={profile} />}
               {activeView === 'config' && <RemoteConfigScreen />}
               {activeView === 'cloudflare_files' && <CloudflareFileManagerScreen />}
-              {activeView === 'products' && <ProductManagementScreen session={session} profile={profile} />}
+              {activeView === 'products' && (
+                <ProductManagementScreen 
+                  session={session} 
+                  onOpenSkuModal={() => setIsSkuModalOpen(true)}
+                  productRefreshKey={productRefreshKey}
+                />
+              )}
             </div>
           </div>
         )}
@@ -971,6 +992,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </div>
         </div>
       )}
+
+      {/* Global Add SKU Modal */}
+      <AddSkuModal 
+        isOpen={isSkuModalOpen} 
+        onClose={() => setIsSkuModalOpen(false)} 
+        onSaveSuccess={() => setProductRefreshKey(prev => prev + 1)}
+        session={session}
+      />
 
       {/* --- CSS INJECTIONS FOR NEUMORPHISM 2.0 SHADOWS & OVERRIDES --- */}
       <style>{`
