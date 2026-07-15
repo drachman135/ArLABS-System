@@ -84,13 +84,9 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
         }
 
         await html5QrCodeRef.current.start(
-          { 
-            facingMode: facingMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
+          { facingMode: facingMode },
           {
-            fps: 20, // Increase frame scan frequency for faster detection
+            fps: 10,
             qrbox: (width) => {
               return {
                 width: Math.min(width * 0.8, 300),
@@ -103,36 +99,6 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
           },
           () => {}
         );
-
-        // Dynamically apply continuous autofocus to the camera hardware stream
-        setTimeout(async () => {
-          try {
-            const videoElem = document.querySelector(`#${scannerId} video`) as HTMLVideoElement;
-            if (videoElem && videoElem.srcObject) {
-              const stream = videoElem.srcObject as MediaStream;
-              const tracks = stream.getVideoTracks();
-              if (tracks && tracks.length > 0) {
-                const track = tracks[0];
-                const capabilities = track.getCapabilities() as any;
-                const constraints: any = {};
-
-                // Request continuous autofocus if supported by camera capabilities
-                if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-                  constraints.focusMode = 'continuous';
-                }
-
-                if (Object.keys(constraints).length > 0) {
-                  await track.applyConstraints({
-                    advanced: [constraints]
-                  });
-                  console.log("[Camera] Applied hardware continuous autofocus constraints:", constraints);
-                }
-              }
-            }
-          } catch (err) {
-            console.warn("[Camera] Continuous autofocus setup failed or not supported:", err);
-          }
-        }, 850); // Settle camera frame before applying constraints
       } catch (err: any) {
         console.error("Camera access/scanner start failed:", err);
         setCheckStatus('error');
