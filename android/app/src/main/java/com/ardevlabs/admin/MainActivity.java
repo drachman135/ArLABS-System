@@ -9,12 +9,14 @@ import android.os.Bundle;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import android.webkit.PermissionRequest;
+
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
     private static final String CHANNEL_ID = "arlabs_admin_alerts";
-    private static final int NOTIFICATION_PERMISSION_CODE = 1001;
+    private static final int PERMISSION_REQUEST_CODE = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -23,8 +25,18 @@ public class MainActivity extends BridgeActivity {
         // Create the high-priority notification channel for heads-up display
         createNotificationChannel();
 
-        // Request POST_NOTIFICATIONS permission on Android 13+ (API 33+)
-        requestNotificationPermission();
+        // Request POST_NOTIFICATIONS and CAMERA permissions natively
+        requestAppPermissions();
+
+        // Override WebChromeClient to explicitly grant WebRTC/Camera permissions to the WebView
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(this.bridge) {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    request.grant(request.getResources());
+                }
+            });
+        }
     }
 
     /**
@@ -58,19 +70,29 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * Requests the POST_NOTIFICATIONS runtime permission required by Android 13+.
-     * Without this, no notifications will appear at all on API 33+ devices.
+     * Requests CAMERA and POST_NOTIFICATIONS runtime permissions on startup.
      */
-    private void requestNotificationPermission() {
+    private void requestAppPermissions() {
+        java.util.List<String> permissionsNeeded = new java.util.ArrayList<>();
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                        this,
-                        new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
-                        NOTIFICATION_PERMISSION_CODE
-                );
+                permissionsNeeded.add(android.Manifest.permission.POST_NOTIFICATIONS);
             }
+        }
+
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(android.Manifest.permission.CAMERA);
+        }
+
+        if (!permissionsNeeded.isEmpty()) {
+            ActivityCompat.requestPermissions(
+                    this,
+                    permissionsNeeded.toArray(new String[0]),
+                    PERMISSION_REQUEST_CODE
+            );
         }
     }
 }
