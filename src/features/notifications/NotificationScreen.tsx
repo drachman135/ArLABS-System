@@ -107,7 +107,9 @@ export const NotificationScreen: React.FC = () => {
   };
 
   const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
-    const response = await fetch('/api/send-notification', {
+    const isCapacitor = window.location.hostname === 'localhost';
+    const baseUrl = isCapacitor ? 'https://ar-labs-system.vercel.app' : '';
+    const response = await fetch(`${baseUrl}/api/send-notification`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

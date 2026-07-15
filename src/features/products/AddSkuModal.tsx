@@ -156,7 +156,9 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
         console.log(`[UI] Product not found in database. Triggering API Scraper for barcode ${code}...`);
         
         const token = session?.access_token;
-        const res = await fetch(`/api/scrape-product?barcode=${code}`, {
+        const isCapacitor = window.location.hostname === 'localhost';
+        const baseUrl = isCapacitor ? 'https://ar-labs-system.vercel.app' : '';
+        const res = await fetch(`${baseUrl}/api/scrape-product?barcode=${code}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
