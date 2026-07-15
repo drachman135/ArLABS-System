@@ -131,17 +131,44 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
     setFoundProduct(null);
     setFormMessage(null);
 
+    // Detect environment for API calls
+    const getApiBaseUrl = () => {
+      // Use Capacitor.isNativePlatform() for accurate detection.
+      // window.Capacitor is truthy even in web browsers since the library always registers itself.
+      const cap = (window as any).Capacitor;
+      const isNative = (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) || window.location.protocol === 'capacitor:';
+      if (isNative) {
+        return 'https://ar-labs-system.vercel.app';
+      }
+      // Browser dev: use env var if set, otherwise relative path (same-origin)
+      if (import.meta.env.VITE_API_BASE_URL) {
+        return import.meta.env.VITE_API_BASE_URL;
+      }
+      return '';
+    };
+
     try {
       // 1. Check local database first
-      const { data: localData, error: dbError } = await supabase
-        .from('daftar_produk')
-        .select('*')
-        .eq('barcode', code.trim())
-        .maybeSingle();
+      console.log(`[AddSKU] Step 1: Checking Supabase for barcode ${code}...`);
+      let localData = null;
+      try {
+        const { data, error: dbError } = await supabase
+          .from('daftar_produk')
+          .select('*')
+          .eq('barcode', code.trim())
+          .maybeSingle();
 
-      if (dbError) throw dbError;
+        if (dbError) {
+          console.warn('[AddSKU] Supabase query error:', dbError.message);
+        } else {
+          localData = data;
+        }
+      } catch (supaErr: any) {
+        console.warn('[AddSKU] Supabase fetch failed (network?):', supaErr.message);
+      }
 
       if (localData) {
+        console.log('[AddSKU] Product found in database!');
         setCheckStatus('found');
         setFoundProduct(localData);
         setFormData({
@@ -153,56 +180,48 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
         });
       } else {
         // 2. Trigger API Scraper
-        console.log(`[UI] Product not found in database. Triggering API Scraper for barcode ${code}...`);
-        
         const token = session?.access_token;
-        
-        const getApiBaseUrl = () => {
-          // Native app (Capacitor) must always use production URL
-          const isNative = !!(window as any).Capacitor || window.location.protocol === 'capacitor:' || (window.location.protocol === 'https:' && window.location.hostname === 'localhost');
-          if (isNative) {
-            return 'https://ar-labs-system.vercel.app';
-          }
-          // Browser dev: use env var if set, otherwise relative path
-          if (import.meta.env.VITE_API_BASE_URL) {
-            return import.meta.env.VITE_API_BASE_URL;
-          }
-          return '';
-        };
         const baseUrl = getApiBaseUrl();
+        const apiUrl = `${baseUrl}/api/scrape-product?barcode=${code}`;
+        console.log(`[AddSKU] Step 2: Calling scraper API at: ${apiUrl}`);
+        
+        try {
+          const res = await fetch(apiUrl, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
 
-        const res = await fetch(`${baseUrl}/api/scrape-product?barcode=${code}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+          console.log(`[AddSKU] Scraper API response status: ${res.status}`);
 
-        if (res.ok) {
-          const scraped = await res.json();
-          if (scraped.success && scraped.data) {
-            setCheckStatus('not_found');
-            setFormData({
-              sku: code,
-              barcode: code,
-              nama_produk: scraped.data.nama_produk || '',
-              brand: scraped.data.brand || '',
-              image_url: scraped.data.image_url || ''
-            });
-            setFormMessage({
-              type: 'success',
-              text: `Produk terdeteksi otomatis dari internet via ${scraped.source || 'Scraper'}! Silakan konfirmasi dan simpan.`
-            });
-          } else {
-            setCheckStatus('not_found');
-            setFormData({ sku: code, barcode: code, nama_produk: '', brand: '', image_url: '' });
+          if (res.ok) {
+            const scraped = await res.json();
+            if (scraped.success && scraped.data) {
+              setCheckStatus('not_found');
+              setFormData({
+                sku: code,
+                barcode: code,
+                nama_produk: scraped.data.nama_produk || '',
+                brand: scraped.data.brand || '',
+                image_url: scraped.data.image_url || ''
+              });
+              setFormMessage({
+                type: 'success',
+                text: `Produk terdeteksi otomatis dari internet via ${scraped.source || 'Scraper'}! Silakan konfirmasi dan simpan.`
+              });
+              return;
+            }
           }
-        } else {
-          setCheckStatus('not_found');
-          setFormData({ sku: code, barcode: code, nama_produk: '', brand: '', image_url: '' });
+        } catch (apiErr: any) {
+          console.warn('[AddSKU] Scraper API failed:', apiErr.message);
         }
+
+        // Fallback: show empty form for manual entry
+        setCheckStatus('not_found');
+        setFormData({ sku: code, barcode: code, nama_produk: '', brand: '', image_url: '' });
       }
     } catch (err: any) {
-      console.error("Barcode processing error:", err);
+      console.error("[AddSKU] Unexpected error:", err);
       setCheckStatus('error');
       setFormMessage({ type: 'error', text: `Gagal verifikasi barcode: ${err.message}` });
     } finally {
