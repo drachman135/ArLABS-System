@@ -3,7 +3,7 @@ import { supabase } from '../../core/supabase';
 import { Html5Qrcode } from 'html5-qrcode';
 import { 
   Package, Camera, Keyboard, CheckCircle, AlertCircle, X,
-  ImageIcon, Loader2, ArrowRight
+  ImageIcon, Loader2, ArrowRight, RefreshCw
 } from 'lucide-react';
 
 interface AddSkuModalProps {
@@ -17,6 +17,7 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
   const [modalMode, setModalMode] = useState<'scan' | 'manual'>('scan');
   const [inputBarcode, setInputBarcode] = useState('');
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   // Scraper & Form state
   const [checkingBarcode, setCheckingBarcode] = useState(false);
@@ -54,7 +55,7 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
     } else {
       stopScanner();
     }
-  }, [isOpen, modalMode]);
+  }, [isOpen, modalMode, facingMode]);
 
   // Clean up scanner on unmount
   useEffect(() => {
@@ -83,7 +84,7 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
         }
 
         await html5QrCodeRef.current.start(
-          { facingMode: "environment" },
+          { facingMode: facingMode },
           {
             fps: 10,
             qrbox: (width) => {
@@ -371,9 +372,19 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
                 <div className="laser-line"></div>
                 <div id={scannerId}></div>
               </div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center animate-pulse">
-                Posisikan Barcode di dalam Kotak Sensor
-              </p>
+              <div className="flex flex-col items-center space-y-2">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center animate-pulse">
+                  Posisikan Barcode di dalam Kotak Sensor
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')}
+                  className="flex items-center space-x-1.5 bg-gray-100 hover:bg-gray-250 text-gray-700 text-[9px] font-black uppercase tracking-wider px-3.5 py-2 rounded-full border-none cursor-pointer transition-all duration-200 active:scale-95"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Ganti ke Kamera {facingMode === 'environment' ? 'Depan' : 'Belakang'}</span>
+                </button>
+              </div>
             </div>
           )}
 
