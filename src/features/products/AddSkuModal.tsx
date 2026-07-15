@@ -156,8 +156,21 @@ export const AddSkuModal: React.FC<AddSkuModalProps> = ({ isOpen, onClose, onSav
         console.log(`[UI] Product not found in database. Triggering API Scraper for barcode ${code}...`);
         
         const token = session?.access_token;
-        const isCapacitor = window.location.hostname === 'localhost';
-        const baseUrl = isCapacitor ? 'https://ar-labs-system.vercel.app' : '';
+        
+        const getApiBaseUrl = () => {
+          // Native app (Capacitor) must always use production URL
+          const isNative = !!(window as any).Capacitor || window.location.protocol === 'capacitor:' || (window.location.protocol === 'https:' && window.location.hostname === 'localhost');
+          if (isNative) {
+            return 'https://ar-labs-system.vercel.app';
+          }
+          // Browser dev: use env var if set, otherwise relative path
+          if (import.meta.env.VITE_API_BASE_URL) {
+            return import.meta.env.VITE_API_BASE_URL;
+          }
+          return '';
+        };
+        const baseUrl = getApiBaseUrl();
+
         const res = await fetch(`${baseUrl}/api/scrape-product?barcode=${code}`, {
           headers: {
             'Authorization': `Bearer ${token}`

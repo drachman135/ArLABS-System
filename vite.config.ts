@@ -4,6 +4,7 @@ import feedbackHandler from './api/feedback';
 import feedbackIdHandler from './api/feedback/[id]';
 import notifyActivationHandler from './api/notify-activation';
 import sendNotificationHandler from './api/send-notification';
+import scrapeProductHandler from './api/scrape-product';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -20,8 +21,13 @@ export default defineConfig(({ mode }) => {
           const apiMiddleware = async (req: any, res: any, next: any) => {
             const url = req.url || '';
             
-            // Match /api/feedback, /api/notify-activation, and /api/send-notification paths
-            if (url.startsWith('/api/feedback') || url.startsWith('/api/notify-activation') || url.startsWith('/api/send-notification')) {
+            // Match /api/feedback, /api/notify-activation, /api/send-notification, and /api/scrape-product paths
+            if (
+              url.startsWith('/api/feedback') || 
+              url.startsWith('/api/notify-activation') || 
+              url.startsWith('/api/send-notification') ||
+              url.startsWith('/api/scrape-product')
+            ) {
               try {
                 const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
                 const pathname = parsedUrl.pathname;
@@ -80,6 +86,11 @@ export default defineConfig(({ mode }) => {
                       ? sendNotificationHandler
                       : (sendNotificationHandler as any).default;
                     await sendNotifFn(req, mockRes);
+                  } else if (pathname === '/api/scrape-product' || pathname === '/api/scrape-product/') {
+                    const scrapeFn = typeof scrapeProductHandler === 'function'
+                      ? scrapeProductHandler
+                      : (scrapeProductHandler as any).default;
+                    await scrapeFn(req, mockRes);
                   } else {
                     next();
                   }

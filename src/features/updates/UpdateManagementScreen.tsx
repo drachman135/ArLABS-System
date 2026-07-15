@@ -392,8 +392,20 @@ export const UpdateManagementScreen: React.FC = () => {
   // Feature 2: Send FCM update push notifications
   const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
     try {
-      const isCapacitor = window.location.hostname === 'localhost';
-      const baseUrl = isCapacitor ? 'https://ar-labs-system.vercel.app' : '';
+      const getApiBaseUrl = () => {
+        // Native app (Capacitor) must always use production URL
+        const isNative = !!(window as any).Capacitor || window.location.protocol === 'capacitor:' || (window.location.protocol === 'https:' && window.location.hostname === 'localhost');
+        if (isNative) {
+          return 'https://ar-labs-system.vercel.app';
+        }
+        // Browser dev: use env var if set, otherwise relative path
+        if (import.meta.env.VITE_API_BASE_URL) {
+          return import.meta.env.VITE_API_BASE_URL;
+        }
+        return '';
+      };
+      const baseUrl = getApiBaseUrl();
+
       const response = await fetch(`${baseUrl}/api/send-notification`, {
         method: 'POST',
         headers: {
