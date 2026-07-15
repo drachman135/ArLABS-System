@@ -12,6 +12,7 @@ import { ApkStatsDashboard } from '../apkstats/ApkStatsDashboard';
 import { CrashReportScreen } from '../crash/CrashReportScreen';
 import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
 import { CloudflareFileManagerScreen } from '../updates/CloudflareFileManagerScreen';
+import { ProductManagementScreen } from '../products/ProductManagementScreen';
 import {
   RefreshCw,
   Wifi,
@@ -33,7 +34,8 @@ import {
   ChevronRight,
   Clock,
   BookOpen,
-  User
+  User,
+  Package
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -43,7 +45,7 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -395,7 +397,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               title: 'Registry',
               items: [
                 { id: 'licenses', label: 'Kelola Lisensi', icon: Key, views: ['licenses'], badge: metrics.activeLicenses },
-                { id: 'customers', label: 'Klien', icon: User, views: ['customers'], badge: null }
+                { id: 'customers', label: 'Klien', icon: User, views: ['customers'], badge: null },
+                { id: 'products', label: 'Daftar Produk / SKU', icon: Package, views: ['products'], badge: null }
               ]
             },
             {
@@ -730,6 +733,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               {activeView === 'feedback' && <FeedbackCenterScreen session={session} profile={profile} />}
               {activeView === 'config' && <RemoteConfigScreen />}
               {activeView === 'cloudflare_files' && <CloudflareFileManagerScreen />}
+              {activeView === 'products' && <ProductManagementScreen session={session} profile={profile} />}
             </div>
           </div>
         )}

@@ -35,6 +35,7 @@ ALTER TABLE public.feedback_reports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public insert" ON public.feedback_reports;
 DROP POLICY IF EXISTS "Allow admin read" ON public.feedback_reports;
 DROP POLICY IF EXISTS "Allow admin update" ON public.feedback_reports;
+DROP POLICY IF EXISTS "Allow admin delete" ON public.feedback_reports;
 
 -- RLS Policies:
 -- 1. Allow anyone to submit feedback (public INSERT)
@@ -45,6 +46,9 @@ CREATE POLICY "Allow admin read" ON public.feedback_reports FOR SELECT TO authen
 
 -- 3. Allow authenticated admin users to update feedback reports (status, developer_note)
 CREATE POLICY "Allow admin update" ON public.feedback_reports FOR UPDATE TO authenticated USING (true);
+
+-- 4. Allow authenticated admin users to delete feedback reports
+CREATE POLICY "Allow admin delete" ON public.feedback_reports FOR DELETE TO authenticated USING (true);
 
 -- Trigger to automatically update updated_at column
 CREATE OR REPLACE FUNCTION update_updated_at_column()
