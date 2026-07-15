@@ -353,6 +353,10 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
           50% { top: 100%; }
           100% { top: 0%; }
         }
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
         .laser-line {
           position: absolute;
           left: 0;
@@ -368,7 +372,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
           width: 100%;
           max-width: 320px;
           margin: 0 auto;
-          aspect-ratio: 4/3;
+          aspect-ratio: 1/1;
           background-color: #0F172A;
           border-radius: 16px;
           overflow: hidden;
@@ -438,7 +442,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
             placeholder="Cari nama produk, brand, atau kode barcode..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-50/30"
+            className="w-full pl-10 pr-4 py-3 sm:py-2.5 border border-gray-200 rounded-xl text-sm sm:text-xs font-bold focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-gray-50/30"
           />
         </div>
         <button
@@ -450,9 +454,10 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
         </button>
       </div>
 
-      {/* Product Table List */}
+      {/* Product Table & Card List Container */}
       <div className="bg-white border border-gray-200/80 rounded-[24px] overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs min-w-[700px]">
             <thead>
               <tr className="bg-gray-50/70 text-gray-500 font-bold uppercase text-[9px] tracking-widest border-b border-gray-150">
@@ -539,6 +544,70 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
           </table>
         </div>
 
+        {/* Mobile View: Product Cards List */}
+        <div className="block sm:hidden divide-y divide-gray-100">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="p-4 flex items-center space-x-3.5 animate-pulse">
+                <div className="w-14 h-14 bg-gray-200 rounded-xl flex-shrink-0"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-gray-200 rounded w-20"></div>
+                  <div className="h-4 bg-gray-200 rounded w-36"></div>
+                  <div className="h-3 bg-gray-200 rounded w-16"></div>
+                </div>
+                <div className="w-8 h-8 bg-gray-200 rounded-lg flex-shrink-0"></div>
+              </div>
+            ))
+          ) : products.length === 0 ? (
+            <div className="p-12 text-center text-gray-400 font-bold uppercase tracking-wider">
+              Tidak ada produk ditemukan
+            </div>
+          ) : (
+            products.map((prod) => (
+              <div key={prod.id} className="p-4 flex items-center space-x-3.5 hover:bg-gray-50/30 transition-all">
+                {prod.image_url ? (
+                  <img 
+                    src={prod.image_url} 
+                    alt={prod.nama_produk} 
+                    className="w-14 h-14 object-contain rounded-xl border border-gray-100 bg-white p-1 flex-shrink-0 shadow-sm"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100 text-gray-400 flex-shrink-0 shadow-sm">
+                    <ImageIcon className="w-5 h-5" />
+                  </div>
+                )}
+                
+                <div className="flex-1 min-w-0 space-y-1">
+                  <span className="text-[9px] font-mono font-bold text-gray-400 block tracking-wider uppercase">
+                    BARCODE: {prod.barcode}
+                  </span>
+                  <h4 className="text-xs font-bold text-gray-800 leading-snug line-clamp-2">
+                    {prod.nama_produk}
+                  </h4>
+                  {prod.brand ? (
+                    <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[9px] font-extrabold uppercase tracking-wide">
+                      {prod.brand}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-gray-400 italic font-semibold">No Brand</span>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => handleDelete(prod.id, prod.nama_produk)}
+                  className="p-3 rounded-xl text-rose-500 hover:bg-rose-50 border-none bg-transparent cursor-pointer flex-shrink-0 touch-manipulation"
+                  title="Hapus Produk"
+                >
+                  <Trash2 className="w-4.5 h-4.5" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Pagination Bar */}
         {totalPages > 1 && (
           <div className="p-4 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-500">
@@ -568,8 +637,13 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
           POPUP MODAL: TAMBAH SKU / SCAN BARCODE
       ────────────────────────────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fadeInSoft_0.25s_ease-out]">
-          <div className="bg-white rounded-[32px] w-full max-w-lg shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-[fadeInSoft_0.25s_ease-out] p-0 sm:p-4">
+          <div className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-lg shadow-2xl border-t border-gray-100 sm:border border-gray-100 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] animate-[slideUp_0.3s_ease-out] sm:animate-[zoomInSoft_0.25s_ease-out]">
+            
+            {/* Mobile Bottom Sheet Handle Bar */}
+            <div className="block sm:hidden w-full pt-3 pb-1 flex justify-center bg-gray-50/50">
+              <div className="w-12 h-1.5 bg-gray-300 rounded-full"></div>
+            </div>
             
             {/* Modal Header */}
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
@@ -662,13 +736,13 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                             verifyAndProcessBarcode(inputBarcode);
                           }
                         }}
-                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 font-mono font-bold"
+                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm sm:text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-gray-50/50 font-mono font-bold"
                       />
                       <button
                         type="button"
                         onClick={() => verifyAndProcessBarcode(inputBarcode)}
                         disabled={!inputBarcode}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider px-5 py-3 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 border-none flex items-center justify-center space-x-1"
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-black text-sm sm:text-xs uppercase tracking-wider px-5 py-3 rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 border-none flex items-center justify-center space-x-1"
                       >
                         <span>Verifikasi</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -734,14 +808,14 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                       onClick={() => {
                         setCheckStatus('not_found'); // open edit form with existing details
                       }}
-                      className="px-4 py-2 bg-white border border-gray-250 text-gray-600 hover:text-blue-600 hover:border-blue-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                      className="px-4 py-3 sm:py-2 bg-white border border-gray-250 text-gray-600 hover:text-blue-600 hover:border-blue-300 font-black text-sm sm:text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
                     >
                       Ubah Data
                     </button>
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer border-none"
+                      className="px-4 py-3 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm sm:text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer border-none"
                     >
                       Selesai
                     </button>
@@ -764,7 +838,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                         type="text"
                         value={formData.barcode}
                         disabled
-                        className="w-full px-3 py-2.5 border border-gray-150 rounded-xl bg-gray-100 text-gray-500 font-mono font-bold text-xs"
+                        className="w-full px-3 py-3 sm:py-2.5 border border-gray-150 rounded-xl bg-gray-100 text-gray-500 font-mono font-bold text-sm sm:text-xs"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -773,7 +847,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                         type="text"
                         value={formData.sku}
                         disabled
-                        className="w-full px-3 py-2.5 border border-gray-150 rounded-xl bg-gray-100 text-gray-500 font-mono font-bold text-xs"
+                        className="w-full px-3 py-3 sm:py-2.5 border border-gray-150 rounded-xl bg-gray-100 text-gray-500 font-mono font-bold text-sm sm:text-xs"
                       />
                     </div>
                   </div>
@@ -787,7 +861,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                       value={formData.nama_produk}
                       onChange={(e) => setFormData(prev => ({ ...prev, nama_produk: e.target.value }))}
                       required
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-bold"
+                      className="w-full px-3 py-3 sm:py-2.5 border border-gray-200 rounded-xl text-sm sm:text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-bold"
                     />
                   </div>
 
@@ -799,7 +873,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                       placeholder="Masukkan merek produk (e.g. Indofood, Coca-Cola)..."
                       value={formData.brand}
                       onChange={(e) => setFormData(prev => ({ ...prev, brand: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-bold"
+                      className="w-full px-3 py-3 sm:py-2.5 border border-gray-200 rounded-xl text-sm sm:text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-bold"
                     />
                   </div>
 
@@ -811,7 +885,7 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                       placeholder="Masukkan link gambar (e.g. https://...)..."
                       value={formData.image_url}
                       onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                      className="w-full px-3 py-3 sm:py-2.5 border border-gray-200 rounded-xl text-sm sm:text-xs outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono"
                     />
                   </div>
 
@@ -838,21 +912,20 @@ export const ProductManagementScreen: React.FC<ProductManagementScreenProps> = (
                     <button
                       type="button"
                       onClick={() => {
-                        // Go back to scan or manual start
                         setCheckStatus('idle');
                         setScanResult(null);
                         if (modalMode === 'scan') {
                           startScanner();
                         }
                       }}
-                      className="px-4 py-2.5 bg-white border border-gray-250 text-gray-600 hover:text-gray-800 hover:bg-gray-50 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                      className="px-4 py-3 sm:py-2.5 bg-white border border-gray-250 text-gray-650 hover:text-gray-800 hover:bg-gray-50 font-black text-sm sm:text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
                     >
                       Batal
                     </button>
                     <button
                       type="submit"
                       disabled={savingProduct}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 border-none flex items-center justify-center space-x-2"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-black text-sm sm:text-xs uppercase tracking-wider px-5 py-3 sm:py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 border-none flex items-center justify-center space-x-2"
                     >
                       {savingProduct && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       <span>{foundProduct ? 'Perbarui Produk' : 'Simpan Produk'}</span>
