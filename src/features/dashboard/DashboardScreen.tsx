@@ -15,6 +15,7 @@ import { CloudflareFileManagerScreen } from '../updates/CloudflareFileManagerScr
 import { ProductManagementScreen } from '../products/ProductManagementScreen';
 import { AddSkuModal } from '../products/AddSkuModal';
 import { MayarIntegrationScreen } from '../mayar/MayarIntegrationScreen';
+import { HelpCenterScreen } from '../help-center/HelpCenterScreen';
 import {
   RefreshCw,
   Wifi,
@@ -39,7 +40,8 @@ import {
   User,
   Package,
   Plus,
-  CreditCard
+  CreditCard,
+  HelpCircle
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -49,7 +51,7 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products' | 'mayar'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products' | 'mayar' | 'help_center'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -422,7 +424,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               items: [
                 { id: 'notifications', label: 'Notifikasi Mengambang', icon: Bell, views: ['notifications'], badge: null },
                 { id: 'announcements', label: 'Notifikasi Diaplikasi', icon: MessageSquare, views: ['announcements'], badge: null },
-                { id: 'config', label: 'Konfigurasi Jarak Jauh', icon: RefreshCw, views: ['config'], badge: null }
+                { id: 'config', label: 'Konfigurasi Jarak Jauh', icon: RefreshCw, views: ['config'], badge: null },
+                { id: 'help_center', label: 'Manajemen Pusat Bantuan', icon: HelpCircle, views: ['help_center'], badge: null }
               ]
             },
             {
@@ -755,6 +758,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               {activeView === 'announcements' && <AnnouncementScreen />}
               {activeView === 'feedback' && <FeedbackCenterScreen session={session} profile={profile} />}
               {activeView === 'config' && <RemoteConfigScreen />}
+              {activeView === 'help_center' && <HelpCenterScreen />}
               {activeView === 'cloudflare_files' && <CloudflareFileManagerScreen />}
               {activeView === 'products' && (
                 <ProductManagementScreen 

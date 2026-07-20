@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../core/supabase';
-import { Search, Loader2, RefreshCw, X, Calendar, Smartphone, User, Plus, Check } from 'lucide-react';
+import { Search, Loader2, RefreshCw, X, Calendar, Smartphone, User, Plus, Check, Trash2, AlertTriangle, CheckSquare, Square } from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -42,6 +42,12 @@ export const CustomerScreen: React.FC = () => {
   // Toast / Generated Key overlay state
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Delete state
+  const [selectedForDelete, setSelectedForDelete] = useState<string[]>([]);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+  const [showBulkConfirm, setShowBulkConfirm] = useState<boolean>(false);
+  const [deleting, setDeleting] = useState<boolean>(false);
 
   // Fetch customers list
   const fetchCustomers = async () => {
@@ -190,6 +196,70 @@ export const CustomerScreen: React.FC = () => {
       }
     });
 
+  // Delete helpers
+  const toggleSelectCustomer = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (selectedForDelete.includes(id)) {
+      setSelectedForDelete(selectedForDelete.filter(item => item !== id));
+    } else {
+      setSelectedForDelete([...selectedForDelete, id]);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedForDelete.length === filteredCustomers.length && filteredCustomers.length > 0) {
+      setSelectedForDelete([]);
+    } else {
+      setSelectedForDelete(filteredCustomers.map(c => c.id));
+    }
+  };
+
+  const handleDeleteSingle = async (customer: Customer) => {
+    setDeleting(true);
+    try {
+      // Delete license activations linked to licenses of this customer
+      await supabase.from('license_activations').delete().eq('customer_id', customer.id);
+      // Delete licenses of this customer
+      await supabase.from('licenses').delete().eq('customer_id', customer.id);
+      // Delete the customer record itself
+      const { error } = await supabase.from('customers').delete().eq('id', customer.id);
+      if (error) throw error;
+
+      setCustomerToDelete(null);
+      if (selectedCustomer?.id === customer.id) setSelectedCustomer(null);
+      setSelectedForDelete(prev => prev.filter(id => id !== customer.id));
+      await fetchCustomers();
+    } catch (err: any) {
+      console.error('Failed to delete customer:', err);
+      alert(`Gagal menghapus pelanggan: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteBulk = async () => {
+    if (selectedForDelete.length === 0) return;
+    setDeleting(true);
+    try {
+      await supabase.from('license_activations').delete().in('customer_id', selectedForDelete);
+      await supabase.from('licenses').delete().in('customer_id', selectedForDelete);
+      const { error } = await supabase.from('customers').delete().in('id', selectedForDelete);
+      if (error) throw error;
+
+      setShowBulkConfirm(false);
+      if (selectedCustomer && selectedForDelete.includes(selectedCustomer.id)) {
+        setSelectedCustomer(null);
+      }
+      setSelectedForDelete([]);
+      await fetchCustomers();
+    } catch (err: any) {
+      console.error('Failed bulk delete:', err);
+      alert(`Gagal menghapus pelanggan terpilih: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 font-['Outfit'] select-none relative">
       
@@ -233,6 +303,17 @@ export const CustomerScreen: React.FC = () => {
             <RefreshCw className="w-4 h-4" />
           </button>
 
+          {/* Bulk Delete Trigger */}
+          {selectedForDelete.length > 0 && (
+            <button
+              onClick={() => setShowBulkConfirm(true)}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition-all duration-300 shadow-[2px_2px_5px_rgba(239,68,68,0.3)] active:scale-95 flex items-center justify-center space-x-1.5 uppercase tracking-wide cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Hapus ({selectedForDelete.length}) Terpilih</span>
+            </button>
+          )}
+
           {/* Register trigger */}
           <button
             onClick={() => setShowRegModal(true)}
@@ -258,6 +339,15 @@ export const CustomerScreen: React.FC = () => {
               <table className="w-full text-left text-xs min-w-[700px]">
                 <thead className="bg-gray-100/50 border-b border-gray-200/50 text-[#64748B] uppercase text-[9px] font-bold tracking-widest">
                   <tr>
+                    <th className="py-4 px-4 w-10">
+                      <button onClick={toggleSelectAll} className="text-gray-400 hover:text-gray-600 flex items-center justify-center border-none bg-transparent cursor-pointer">
+                        {filteredCustomers.length > 0 && selectedForDelete.length === filteredCustomers.length ? (
+                          <CheckSquare className="w-4 h-4 text-[#0EA5E9]" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-4 px-6">Customer Name</th>
                     <th className="py-4 px-6">Email Address</th>
                     <th className="py-4 px-6">WhatsApp</th>
@@ -265,12 +355,13 @@ export const CustomerScreen: React.FC = () => {
                     <th className="py-4 px-6">Active Licenses</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Registration Date</th>
+                    <th className="py-4 px-4 text-center w-12">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-[#1E293B]">
                   {filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
+                      <td colSpan={9} className="py-12 text-center text-[#64748B] font-bold tracking-wide uppercase">
                         NO_ACTIVE_RECORDS_FOUND
                       </td>
                     </tr>
@@ -287,6 +378,17 @@ export const CustomerScreen: React.FC = () => {
                           onClick={() => handleSelectCustomer(cust)}
                           className={`cursor-pointer transition-colors duration-200 hover:bg-sky-500/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
                         >
+                          {/* Checkbox */}
+                          <td className="py-4 px-4" onClick={(e) => toggleSelectCustomer(cust.id, e)}>
+                            <button className="text-gray-400 hover:text-gray-600 flex items-center justify-center border-none bg-transparent cursor-pointer">
+                              {selectedForDelete.includes(cust.id) ? (
+                                <CheckSquare className="w-4 h-4 text-[#0EA5E9]" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+
                           {/* Name */}
                           <td className="py-4 px-6 font-bold text-[#1E293B]">
                             {cust.name}
@@ -323,6 +425,17 @@ export const CustomerScreen: React.FC = () => {
                           <td className="py-4 px-6 text-right font-mono text-[10px] text-gray-400">
                             {new Date(cust.created_at).toLocaleDateString('en-US')}
                           </td>
+
+                          {/* Action Delete */}
+                          <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => setCustomerToDelete(cust)}
+                              className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors border-none bg-transparent cursor-pointer"
+                              title="Hapus Data Pelanggan Ini"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -352,9 +465,18 @@ export const CustomerScreen: React.FC = () => {
                     className="cursor-pointer bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm hover:border-[#0EA5E9]/30 transition-all"
                   >
                     <div className="flex justify-between items-start">
-                      <span className="font-bold text-sm text-[#1E293B] block truncate max-w-[170px]">
-                        {cust.name}
-                      </span>
+                      <div className="flex items-center space-x-2.5">
+                        <button onClick={(e) => toggleSelectCustomer(cust.id, e)} className="text-gray-400 hover:text-gray-600 flex items-center justify-center border-none bg-transparent cursor-pointer p-0">
+                          {selectedForDelete.includes(cust.id) ? (
+                            <CheckSquare className="w-4 h-4 text-[#0EA5E9]" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                        <span className="font-bold text-sm text-[#1E293B] block truncate max-w-[150px]">
+                          {cust.name}
+                        </span>
+                      </div>
                       <span className={`px-2 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wide flex-shrink-0 ${statusBadge}`}>
                         {cust.status}
                       </span>
@@ -379,8 +501,20 @@ export const CustomerScreen: React.FC = () => {
                       </div>
                     </div>
                     
-                    <div className="text-[9px] text-gray-400 text-right pt-1 font-mono">
-                      Registered: {new Date(cust.created_at).toLocaleDateString()}
+                    <div className="flex justify-between items-center pt-1 border-t border-gray-50/50">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCustomerToDelete(cust);
+                        }}
+                        className="flex items-center space-x-1 text-red-500 hover:text-red-600 text-[10px] font-bold uppercase border-none bg-transparent cursor-pointer p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus</span>
+                      </button>
+                      <div className="text-[9px] text-gray-400 font-mono">
+                        Registered: {new Date(cust.created_at).toLocaleDateString()}
+                      </div>
                     </div>
                   </div>
                 );
@@ -490,10 +624,21 @@ export const CustomerScreen: React.FC = () => {
             </div>
 
             {/* Bottom Actions */}
-            <div className="pt-4 border-t border-gray-100 mt-6">
+            <div className="pt-4 border-t border-gray-100 mt-6 flex space-x-3">
+              <button
+                onClick={() => {
+                  const toDel = selectedCustomer;
+                  setSelectedCustomer(null);
+                  setCustomerToDelete(toDel);
+                }}
+                className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center justify-center space-x-1.5 uppercase cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus</span>
+              </button>
               <button
                 onClick={() => setSelectedCustomer(null)}
-                className="w-full bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md uppercase tracking-wide"
+                className="flex-1 bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md uppercase tracking-wide cursor-pointer"
               >
                 Close View
               </button>
@@ -626,6 +771,76 @@ export const CustomerScreen: React.FC = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 6. Single Delete Confirmation Modal */}
+      {customerToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.2)] p-6 max-w-sm w-full rounded-[24px] space-y-5 text-center animate-scale-up">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mx-auto shadow-inner">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider">Konfirmasi Hapus Data</h4>
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                Apakah Anda yakin ingin menghapus permanen data pelanggan <span className="font-bold text-[#1E293B]">{customerToDelete.name}</span> ({customerToDelete.email})? Seluruh lisensi dan riwayat aktivasi perangkatnya juga akan dihapus.
+              </p>
+            </div>
+            <div className="flex space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCustomerToDelete(null)}
+                disabled={deleting}
+                className="flex-1 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs py-3 rounded-xl transition-all uppercase cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteSingle(customerToDelete)}
+                disabled={deleting}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md uppercase flex items-center justify-center space-x-1 cursor-pointer"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Ya, Hapus</span>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Bulk Delete Confirmation Modal */}
+      {showBulkConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white/95 border border-white/60 shadow-[10px_10px_30px_rgba(0,0,0,0.2)] p-6 max-w-sm w-full rounded-[24px] space-y-5 text-center animate-scale-up">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mx-auto shadow-inner">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-sm font-black text-[#1E293B] uppercase tracking-wider">Hapus ({selectedForDelete.length}) Pelanggan</h4>
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                Anda memilih <span className="font-bold text-red-500">{selectedForDelete.length} data pelanggan</span> untuk dihapus. Semua data lisensi, aktivasi, dan profil yang terpilih akan dibersihkan permanen dari database. Lanjutkan?
+              </p>
+            </div>
+            <div className="flex space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkConfirm(false)}
+                disabled={deleting}
+                className="flex-1 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 font-bold text-xs py-3 rounded-xl transition-all uppercase cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteBulk}
+                disabled={deleting}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md uppercase flex items-center justify-center space-x-1 cursor-pointer"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Hapus Semua</span>}
+              </button>
+            </div>
           </div>
         </div>
       )}
