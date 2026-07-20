@@ -17,6 +17,7 @@
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.344.0",
     "onesignal-cordova-plugin": "^5.5.0",
+    "postcss-selector-parser": "^7.1.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

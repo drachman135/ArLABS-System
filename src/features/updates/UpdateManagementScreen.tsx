@@ -393,16 +393,13 @@ export const UpdateManagementScreen: React.FC = () => {
   const sendFcmNotification = async (notifTitle: string, notifBody: string, targetTokenOrTopic: string) => {
     try {
       const getApiBaseUrl = () => {
-        // Use Capacitor.isNativePlatform() for accurate detection.
-        // window.Capacitor is truthy even in web browsers since the library always registers itself.
         const cap = (window as any).Capacitor;
         const isNative = (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) || window.location.protocol === 'capacitor:';
         if (isNative) {
-          return 'https://ar-labs-system.vercel.app';
-        }
-        // Browser dev: use env var if set, otherwise relative path (same-origin)
-        if (import.meta.env.VITE_API_BASE_URL) {
-          return import.meta.env.VITE_API_BASE_URL;
+          if (import.meta.env.PROD) {
+            return 'https://ar-labs-system.vercel.app';
+          }
+          return import.meta.env.VITE_API_BASE_URL || 'https://ar-labs-system.vercel.app';
         }
         return '';
       };

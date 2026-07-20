@@ -14,6 +14,7 @@ import { FeedbackCenterScreen } from '../feedback/FeedbackCenterScreen';
 import { CloudflareFileManagerScreen } from '../updates/CloudflareFileManagerScreen';
 import { ProductManagementScreen } from '../products/ProductManagementScreen';
 import { AddSkuModal } from '../products/AddSkuModal';
+import { MayarIntegrationScreen } from '../mayar/MayarIntegrationScreen';
 import {
   RefreshCw,
   Wifi,
@@ -37,7 +38,8 @@ import {
   BookOpen,
   User,
   Package,
-  Plus
+  Plus,
+  CreditCard
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -47,7 +49,7 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products' | 'mayar'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -424,6 +426,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               ]
             },
             {
+              title: 'Payment Gateway',
+              items: [
+                { id: 'mayar', label: 'Integrasi Mayar', icon: CreditCard, views: ['mayar'], badge: null }
+              ]
+            },
+            {
               title: 'Reports',
               items: [
                 { id: 'analytics', label: 'System Analytics', icon: LayoutDashboard, views: ['analytics'], badge: null },
@@ -755,6 +763,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                   productRefreshKey={productRefreshKey}
                 />
               )}
+              {activeView === 'mayar' && <MayarIntegrationScreen />}
             </div>
           </div>
         )}
