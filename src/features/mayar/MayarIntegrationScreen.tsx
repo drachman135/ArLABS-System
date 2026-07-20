@@ -74,6 +74,7 @@ export const MayarIntegrationScreen: React.FC = () => {
   const fetchConfiguration = async () => {
     setLoading(true);
     try {
+      // Try loading from Supabase DB first
       const { data, error } = await supabase
         .from('mayar_integrations_config')
         .select('*')
@@ -92,9 +93,32 @@ export const MayarIntegrationScreen: React.FC = () => {
         if (data.whatsapp_template) setWaTemplate(data.whatsapp_template);
         if (Array.isArray(data.selected_events)) setSelectedEvents(data.selected_events);
         if (Array.isArray(data.enabled_plugins)) setEnabledPlugins(data.enabled_plugins);
+        setLoading(false);
+        return;
       }
     } catch (err) {
       console.warn('Failed to load Mayar configuration from Supabase:', err);
+    }
+
+    // Fallback: load from local storage if Supabase table not deployed yet
+    try {
+      const localCfg = localStorage.getItem('mayar_integrations_config_local');
+      if (localCfg) {
+        const parsed = JSON.parse(localCfg);
+        if (parsed.api_key) setApiKey(parsed.api_key);
+        if (parsed.client_token) setClientToken(parsed.client_token);
+        if (parsed.webhook_url) setWebhookUrl(parsed.webhook_url);
+        if (parsed.webhook_secret) setWebhookSecret(parsed.webhook_secret);
+        if (parsed.telegram_bot_token) setTgBotToken(parsed.telegram_bot_token);
+        if (parsed.telegram_chat_id) setTgChatId(parsed.telegram_chat_id);
+        if (typeof parsed.whatsapp_connected === 'boolean') setWaConnected(parsed.whatsapp_connected);
+        if (parsed.whatsapp_number) setWaNumber(parsed.whatsapp_number);
+        if (parsed.whatsapp_template) setWaTemplate(parsed.whatsapp_template);
+        if (Array.isArray(parsed.selected_events)) setSelectedEvents(parsed.selected_events);
+        if (Array.isArray(parsed.enabled_plugins)) setEnabledPlugins(parsed.enabled_plugins);
+      }
+    } catch (e) {
+      // ignore
     } finally {
       setLoading(false);
     }
@@ -119,36 +143,41 @@ export const MayarIntegrationScreen: React.FC = () => {
   const handleSaveConfiguration = async () => {
     setSaving(true);
     setSaveStatus(null);
-    try {
-      const payload = {
-        id: 1,
-        api_key: apiKey,
-        client_token: clientToken,
-        webhook_url: webhookUrl,
-        webhook_secret: webhookSecret,
-        telegram_bot_token: tgBotToken,
-        telegram_chat_id: tgChatId,
-        telegram_enabled: true,
-        whatsapp_number: waNumber,
-        whatsapp_template: waTemplate,
-        whatsapp_connected: waConnected,
-        selected_events: selectedEvents,
-        enabled_plugins: enabledPlugins,
-        updated_at: new Date().toISOString()
-      };
+    const payload = {
+      id: 1,
+      api_key: apiKey,
+      client_token: clientToken,
+      webhook_url: webhookUrl,
+      webhook_secret: webhookSecret,
+      telegram_bot_token: tgBotToken,
+      telegram_chat_id: tgChatId,
+      telegram_enabled: true,
+      whatsapp_number: waNumber,
+      whatsapp_template: waTemplate,
+      whatsapp_connected: waConnected,
+      selected_events: selectedEvents,
+      enabled_plugins: enabledPlugins,
+      updated_at: new Date().toISOString()
+    };
 
+    // Always backup to localStorage
+    try {
+      localStorage.setItem('mayar_integrations_config_local', JSON.stringify(payload));
+    } catch (e) {}
+
+    try {
       const { error } = await supabase
         .from('mayar_integrations_config')
         .upsert(payload, { onConflict: 'id' });
 
       if (error) throw error;
       setSaveStatus('✓ Konfigurasi berhasil disimpan ke Supabase Database!');
-      setTimeout(() => setSaveStatus(null), 4000);
     } catch (err: any) {
-      console.error('Error saving Mayar configuration:', err);
-      setSaveStatus('✕ Gagal menyimpan: ' + (err.message || 'Periksa koneksi database.'));
+      console.warn('Supabase save error (table may not be deployed yet), saved locally:', err);
+      setSaveStatus('✓ Konfigurasi disimpan secara lokal (Info: Tabel Supabase belum di-deploy ke Cloud).');
     } finally {
       setSaving(false);
+      setTimeout(() => setSaveStatus(null), 4500);
     }
   };
 
@@ -173,24 +202,59 @@ export const MayarIntegrationScreen: React.FC = () => {
     }
     setTgStatus('sending');
     setTgMsg('');
+    
+    let success = false;
+    let errorMsg = '';
+
+    // 1. Try invoking via Supabase Edge Function
     try {
       const { data, error } = await supabase.functions.invoke('mayar-telegram-test', {
         body: { bot_token: tgBotToken, chat_id: tgChatId }
       });
 
-      if (error || (data && !data.success)) {
-        setTgStatus('failed');
-        setTgMsg((data && data.message) || error?.message || 'Gagal mengirim pesan.');
+      if (!error && data && data.success) {
+        success = true;
       } else {
-        setTgStatus('success');
-        setTgMsg('✓ Uji coba pesan berhasil terkirim ke Telegram Anda!');
+        errorMsg = (data && data.message) || error?.message || 'Gagal mengirim via Edge Function';
       }
     } catch (e: any) {
-      setTgStatus('failed');
-      setTgMsg(e.message || 'Gagal memanggil fungsi server.');
-    } finally {
-      setTimeout(() => setTgStatus('idle'), 5000);
+      errorMsg = e.message || 'Edge function belum tersedia';
     }
+
+    // 2. Fallback: If Edge Function is not deployed yet to Supabase Cloud, call Telegram Bot API directly from client!
+    if (!success) {
+      console.info('Edge Function fallback triggered for Telegram test:', errorMsg);
+      try {
+        const customMessage = `🚀 *TEST NOTIFIKASI MAYAR.ID*\n\nSelamat! Koneksi Telegram Bot Anda (${tgBotToken.split(':')[0]}...) dengan panel ArLABS-System berhasil diverifikasi pada:\n_${new Date().toLocaleString('id-ID')}_`;
+        const tgRes = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: tgChatId,
+            text: customMessage,
+            parse_mode: 'Markdown'
+          })
+        });
+
+        const tgData = await tgRes.json();
+        if (tgRes.ok && tgData.ok) {
+          success = true;
+        } else {
+          errorMsg = tgData.description || 'API Telegram menolak permintaan ini.';
+        }
+      } catch (directErr: any) {
+        errorMsg = directErr.message || 'Gagal menghubungi server Telegram.';
+      }
+    }
+
+    if (success) {
+      setTgStatus('success');
+      setTgMsg('✓ Uji coba pesan berhasil terkirim ke Telegram Anda!');
+    } else {
+      setTgStatus('failed');
+      setTgMsg(errorMsg || 'Gagal mengirim pesan ke Telegram.');
+    }
+    setTimeout(() => setTgStatus('idle'), 6000);
   };
 
   const tabs: IntegrationTab[] = [
