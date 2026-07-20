@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../core/supabase';
 import { 
   Key, 
   Globe, 
@@ -13,7 +14,9 @@ import {
   ExternalLink,
   Info,
   Shield,
-  Wifi
+  Wifi,
+  Save,
+  RefreshCw
 } from 'lucide-react';
 
 interface IntegrationTab {
@@ -26,18 +29,23 @@ interface IntegrationTab {
 export const MayarIntegrationScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('api-keys');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   // API State
-  const apiKey = 'mayar_live_550e8400-e29b-41d4-a716-446655440000';
-  const clientToken = 'tok_usr_a1b2c3d4e5f6';
+  const [apiKey, setApiKey] = useState('mayar_live_550e8400-e29b-41d4-a716-446655440000');
+  const [clientToken, setClientToken] = useState('tok_usr_a1b2c3d4e5f6');
   const [showApiKey, setShowApiKey] = useState(false);
 
   // Webhook State
   const [webhookUrl, setWebhookUrl] = useState('https://api.arlabs-system.com/webhooks/mayar');
-  const webhookSecret = 'whsec_MayarEndpointSecret2026!';
-  const [selectedEvents, setSelectedEvents] = useState<string[]>( [
+  const [webhookSecret, setWebhookSecret] = useState('whsec_MayarEndpointSecret2026!');
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([
     'payment.success', 'payment.failed', 'subscription.cancelled'
   ]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loadingTx, setLoadingTx] = useState<boolean>(false);
 
   // Whatsapp State
   const [waConnected, setWaConnected] = useState(false);
@@ -48,6 +56,7 @@ export const MayarIntegrationScreen: React.FC = () => {
   const [tgBotToken, setTgBotToken] = useState('');
   const [tgChatId, setTgChatId] = useState('');
   const [tgStatus, setTgStatus] = useState<'idle' | 'sending' | 'success' | 'failed'>('idle');
+  const [tgMsg, setTgMsg] = useState<string>('');
 
   // No-Code widget generator state
   const [buttonText, setButtonText] = useState('Bayar Sekarang');
@@ -56,6 +65,92 @@ export const MayarIntegrationScreen: React.FC = () => {
 
   // Plugins State
   const [enabledPlugins, setEnabledPlugins] = useState<string[]>(['lms', 'shipping']);
+
+  useEffect(() => {
+    fetchConfiguration();
+    fetchTransactions();
+  }, []);
+
+  const fetchConfiguration = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('mayar_integrations_config')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (data && !error) {
+        if (data.api_key) setApiKey(data.api_key);
+        if (data.client_token) setClientToken(data.client_token);
+        if (data.webhook_url) setWebhookUrl(data.webhook_url);
+        if (data.webhook_secret) setWebhookSecret(data.webhook_secret);
+        if (data.telegram_bot_token) setTgBotToken(data.telegram_bot_token);
+        if (data.telegram_chat_id) setTgChatId(data.telegram_chat_id);
+        if (typeof data.whatsapp_connected === 'boolean') setWaConnected(data.whatsapp_connected);
+        if (data.whatsapp_number) setWaNumber(data.whatsapp_number);
+        if (data.whatsapp_template) setWaTemplate(data.whatsapp_template);
+        if (Array.isArray(data.selected_events)) setSelectedEvents(data.selected_events);
+        if (Array.isArray(data.enabled_plugins)) setEnabledPlugins(data.enabled_plugins);
+      }
+    } catch (err) {
+      console.warn('Failed to load Mayar configuration from Supabase:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    setLoadingTx(true);
+    try {
+      const { data } = await supabase
+        .from('mayar_transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setTransactions(data || []);
+    } catch (e) {
+      console.warn('Failed fetching Mayar transactions:', e);
+    } finally {
+      setLoadingTx(false);
+    }
+  };
+
+  const handleSaveConfiguration = async () => {
+    setSaving(true);
+    setSaveStatus(null);
+    try {
+      const payload = {
+        id: 1,
+        api_key: apiKey,
+        client_token: clientToken,
+        webhook_url: webhookUrl,
+        webhook_secret: webhookSecret,
+        telegram_bot_token: tgBotToken,
+        telegram_chat_id: tgChatId,
+        telegram_enabled: true,
+        whatsapp_number: waNumber,
+        whatsapp_template: waTemplate,
+        whatsapp_connected: waConnected,
+        selected_events: selectedEvents,
+        enabled_plugins: enabledPlugins,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('mayar_integrations_config')
+        .upsert(payload, { onConflict: 'id' });
+
+      if (error) throw error;
+      setSaveStatus('✓ Konfigurasi berhasil disimpan ke Supabase Database!');
+      setTimeout(() => setSaveStatus(null), 4000);
+    } catch (err: any) {
+      console.error('Error saving Mayar configuration:', err);
+      setSaveStatus('✕ Gagal menyimpan: ' + (err.message || 'Periksa koneksi database.'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleCopy = (text: string, identifier: string) => {
     navigator.clipboard.writeText(text);
@@ -71,16 +166,31 @@ export const MayarIntegrationScreen: React.FC = () => {
     }
   };
 
-  const handleTestTelegram = () => {
+  const handleTestTelegram = async () => {
     if (!tgBotToken || !tgChatId) {
       alert('Silakan isi Bot Token dan Chat ID terlebih dahulu.');
       return;
     }
     setTgStatus('sending');
-    setTimeout(() => {
-      setTgStatus('success');
-      setTimeout(() => setTgStatus('idle'), 3000);
-    }, 1500);
+    setTgMsg('');
+    try {
+      const { data, error } = await supabase.functions.invoke('mayar-telegram-test', {
+        body: { bot_token: tgBotToken, chat_id: tgChatId }
+      });
+
+      if (error || (data && !data.success)) {
+        setTgStatus('failed');
+        setTgMsg((data && data.message) || error?.message || 'Gagal mengirim pesan.');
+      } else {
+        setTgStatus('success');
+        setTgMsg('✓ Uji coba pesan berhasil terkirim ke Telegram Anda!');
+      }
+    } catch (e: any) {
+      setTgStatus('failed');
+      setTgMsg(e.message || 'Gagal memanggil fungsi server.');
+    } finally {
+      setTimeout(() => setTgStatus('idle'), 5000);
+    }
   };
 
   const tabs: IntegrationTab[] = [
@@ -88,7 +198,7 @@ export const MayarIntegrationScreen: React.FC = () => {
     { id: 'webhook', label: 'Webhook', icon: Globe, description: 'Konfigurasi push notifikasi event transaksi real-time.' },
     { id: 'whatsapp', label: 'Whatsapp Unofficial', icon: MessageSquare, description: 'Kirim notifikasi tagihan otomatis via nomor WhatsApp Anda.' },
     { id: 'telegram', label: 'Telegram Notification', icon: Send, description: 'Kirim log transaksi instan ke chat bot Telegram.' },
-    { id: 'mcp-server', label: 'MCP Server', icon: Cpu, description: 'Hubunakan AI Agent Anda secara aman ke dashboard Mayar.' },
+    { id: 'mcp-server', label: 'MCP Server', icon: Cpu, description: 'Hubungkan AI Agent Anda secara aman ke dashboard Mayar.' },
     { id: 'zapier', label: 'Zapier', icon: Zap, description: 'Otomasi tanpa kode dengan ribuan aplikasi eksternal.' },
     { id: 'no-code', label: 'No-Code Widget', icon: Code, description: 'Tempelkan tombol bayar instan ke website Anda.' },
     { id: 'plugins', label: 'Plugins Store', icon: ShoppingBag, description: 'Aktifkan add-on penunjang bisnis tambahan.' }
@@ -104,13 +214,23 @@ export const MayarIntegrationScreen: React.FC = () => {
   ${buttonText}
 </button>`;
 
+  if (loading) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3 text-gray-400">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+        <p className="text-xs font-bold uppercase tracking-wider">Memuat Konfigurasi Mayar Backend...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 min-h-[65vh] w-full text-gray-700 animate-[fadeInSoft_0.2s_ease-out]">
       
       {/* Internal Tabs Navigation (Left Sidebar) */}
       <div className="w-full lg:w-[280px] flex-shrink-0 flex flex-col space-y-1.5 bg-gray-50/50 p-3 rounded-2xl border border-gray-150">
-        <div className="px-3 py-2">
+        <div className="px-3 py-2 flex items-center justify-between">
           <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Metode Integrasi</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Database Connected"></span>
         </div>
         {tabs.map((tab) => {
           const TabIcon = tab.icon;
@@ -140,18 +260,35 @@ export const MayarIntegrationScreen: React.FC = () => {
       <div className="flex-1 bg-white border border-gray-200/80 rounded-2xl p-6 min-h-[500px] flex flex-col justify-between">
         
         <div className="space-y-6">
-          {/* Header Info */}
-          <div className="border-b border-gray-100 pb-4">
-            <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider flex items-center gap-2">
-              {tabs.find(t => t.id === activeTab)?.label}
-              <span className="bg-blue-50 text-blue-600 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-blue-100">
-                Mayar SDK
-              </span>
-            </h3>
-            <p className="text-xs text-gray-400 mt-1 font-bold">
-              {tabs.find(t => t.id === activeTab)?.description}
-            </p>
+          {/* Header Info with Save Button */}
+          <div className="border-b border-gray-100 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                {tabs.find(t => t.id === activeTab)?.label}
+                <span className="bg-blue-50 text-blue-600 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-blue-100">
+                  Mayar SDK Backend
+                </span>
+              </h3>
+              <p className="text-xs text-gray-400 mt-1 font-bold">
+                {tabs.find(t => t.id === activeTab)?.description}
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveConfiguration}
+              disabled={saving}
+              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer border-none flex-shrink-0"
+            >
+              {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{saving ? 'Menyimpan...' : 'Simpan Konfigurasi'}</span>
+            </button>
           </div>
+
+          {saveStatus && (
+            <div className={`p-3 rounded-xl text-xs font-bold ${saveStatus.includes('✓') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'}`}>
+              {saveStatus}
+            </div>
+          )}
 
           {/* TAB CONTENT: API KEYS & TOKEN */}
           {activeTab === 'api-keys' && (
@@ -159,7 +296,7 @@ export const MayarIntegrationScreen: React.FC = () => {
               <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start space-x-3">
                 <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 leading-relaxed font-semibold">
-                  API Key digunakan untuk mengautentikasi request backend sistem ArLABS ke gateway Mayar. Jagalah kerahasiaan API Key Anda dan jangan dibagikan secara bebas.
+                  API Key digunakan oleh backend server untuk mengautentikasi request ke gateway Mayar. Data disimpan secara permanen di Supabase Database (`mayar_integrations_config`).
                 </p>
               </div>
 
@@ -170,9 +307,9 @@ export const MayarIntegrationScreen: React.FC = () => {
                     <div className="relative flex-1">
                       <input 
                         type={showApiKey ? 'text' : 'password'} 
-                        value={apiKey} 
-                        readOnly 
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono pr-12 focus:outline-none"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
                       <button 
                         onClick={() => setShowApiKey(!showApiKey)}
@@ -195,9 +332,9 @@ export const MayarIntegrationScreen: React.FC = () => {
                   <div className="flex space-x-2">
                     <input 
                       type="text" 
-                      value={clientToken} 
-                      readOnly 
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+                      value={clientToken}
+                      onChange={(e) => setClientToken(e.target.value)}
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                     <button 
                       onClick={() => handleCopy(clientToken, 'clientToken')}
@@ -213,17 +350,20 @@ export const MayarIntegrationScreen: React.FC = () => {
 
           {/* TAB CONTENT: WEBHOOK */}
           {activeTab === 'webhook' && (
-            <div className="space-y-5 animate-[zoomInSoft_0.15s_ease-out]">
+            <div className="space-y-6 animate-[zoomInSoft_0.15s_ease-out]">
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-2">Endpoint URL</label>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-2">Endpoint URL (Supabase Edge Function)</label>
                   <input 
                     type="text" 
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
-                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none"
-                    placeholder="https://yourdomain.com/webhook"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none font-mono"
+                    placeholder="https://yourproject.supabase.co/functions/v1/mayar-webhook"
                   />
+                  <p className="text-[9px] text-gray-400 mt-1 font-medium">
+                    Salin URL ini dan tempelkan ke menu Webhook di dashboard resmi Mayar.id Anda.
+                  </p>
                 </div>
 
                 <div>
@@ -231,9 +371,9 @@ export const MayarIntegrationScreen: React.FC = () => {
                   <div className="flex space-x-2">
                     <input 
                       type="text" 
-                      value={webhookSecret} 
-                      readOnly 
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+                      value={webhookSecret}
+                      onChange={(e) => setWebhookSecret(e.target.value)}
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                     <button 
                       onClick={() => handleCopy(webhookSecret, 'webhookSecret')}
@@ -277,6 +417,76 @@ export const MayarIntegrationScreen: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Live Webhook Transactions Log Table */}
+              <div className="border-t border-gray-150 pt-5 space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-black uppercase text-gray-800 tracking-wider flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-blue-600" />
+                    Riwayat Transaksi Webhook Masuk
+                  </h4>
+                  <button 
+                    onClick={fetchTransactions}
+                    disabled={loadingTx}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all border-none bg-transparent cursor-pointer flex items-center justify-center"
+                    title="Refresh transactions"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingTx ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                  <table className="w-full text-left text-xs min-w-[500px]">
+                    <thead className="bg-gray-50 text-gray-400 font-bold uppercase text-[9px] tracking-wider border-b border-gray-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Tx ID</th>
+                        <th className="py-2.5 px-3">Customer</th>
+                        <th className="py-2.5 px-3">Nominal</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3 text-right">Waktu</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium text-gray-600">
+                      {transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-6 text-center text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                            Belum Ada Transaksi dari Webhook Mayar
+                          </td>
+                        </tr>
+                      ) : (
+                        transactions.map((tx) => {
+                          const statusBadge = tx.payment_status === 'SUCCESS' 
+                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+                            : tx.payment_status === 'FAILED' 
+                            ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                            : 'bg-amber-50 text-amber-600 border border-amber-100';
+
+                          return (
+                            <tr key={tx.id || tx.transaction_id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="py-2.5 px-3 font-mono text-[10px] font-bold text-gray-800">{tx.transaction_id}</td>
+                              <td className="py-2.5 px-3">
+                                <div className="font-bold text-gray-800">{tx.customer_name || 'No Name'}</div>
+                                <div className="text-[10px] text-gray-400">{tx.customer_email || ''}</div>
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-gray-800">
+                                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: tx.currency || 'IDR', maximumFractionDigits: 0 }).format(tx.amount || 0)}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${statusBadge}`}>
+                                  {tx.payment_status}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-[10px] text-gray-400">
+                                {tx.created_at ? new Date(tx.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -300,7 +510,7 @@ export const MayarIntegrationScreen: React.FC = () => {
                       setWaConnected(false);
                       setWaNumber('');
                     } else {
-                      const num = prompt('Masukkan nomor WhatsApp Anda (Format: 628xxx):');
+                      const num = prompt('Masukkan nomor WhatsApp Anda (Format: 628xxx):', waNumber || '628123456789');
                       if (num) {
                         setWaNumber(num);
                         setWaConnected(true);
@@ -373,24 +583,26 @@ export const MayarIntegrationScreen: React.FC = () => {
                     type="text" 
                     value={tgChatId}
                     onChange={(e) => setTgChatId(e.target.value)}
-                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none font-mono"
                     placeholder="Contoh: 987654321 atau -100123456789"
                   />
                 </div>
 
-                <div className="flex justify-start">
+                <div className="flex items-center space-x-3 pt-2">
                   <button
                     onClick={handleTestTelegram}
                     disabled={tgStatus === 'sending'}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer border-none flex items-center space-x-2"
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer border-none flex items-center space-x-2"
                   >
+                    {tgStatus === 'sending' && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                     <span>{tgStatus === 'sending' ? 'Mengirim...' : 'Kirim Test Notifikasi'}</span>
                   </button>
+                  <span className="text-[10px] text-gray-400 font-bold">(*Pastikan sudah diklik Simpan Konfigurasi)</span>
                 </div>
 
-                {tgStatus === 'success' && (
-                  <div className="p-3 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100">
-                    ✓ Notifikasi uji coba berhasil dikirim! Silakan periksa channel/bot Telegram Anda.
+                {tgMsg && (
+                  <div className={`p-3 rounded-xl text-xs font-bold border ${tgStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                    {tgMsg}
                   </div>
                 )}
               </div>
@@ -636,7 +848,7 @@ export const MayarIntegrationScreen: React.FC = () => {
           </span>
           <span className="flex items-center gap-1 uppercase text-[9px] tracking-wider font-black text-emerald-500">
             <Wifi className="w-3.5 h-3.5" />
-            Online Gateway Active
+            Online Gateway & Supabase DB Active
           </span>
         </div>
 
