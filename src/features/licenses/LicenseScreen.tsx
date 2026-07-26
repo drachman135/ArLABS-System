@@ -132,6 +132,10 @@ export const LicenseScreen: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null);
 
+  // Edit Package State
+  const [editAppId, setEditAppId] = useState<string>('');
+  const [isEditingPackage, setIsEditingPackage] = useState<boolean>(false);
+
   // Helper calculation for remaining days
   const getRemainingDaysText = (lic: License) => {
     const lType = lic.license_type || lic.type;
@@ -226,6 +230,33 @@ export const LicenseScreen: React.FC = () => {
       window.dispatchEvent(new Event('db-refresh'));
     } catch (err) {
       console.error('Failed to suspend license: ', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Update Application Package
+  const handleUpdateApplication = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const { error } = await supabase
+        .from('licenses')
+        .update({ application_id: editAppId || null, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      alert('Package / Application updated successfully.');
+      setIsEditingPackage(false);
+      
+      await fetchLicenses();
+      
+      const { data } = await supabase.from('licenses').select('*, customers(id, name, email, whatsapp, phone), applications(id, app_name, package_name)').eq('id', id).single();
+      if(data) setSelectedLicense(data);
+
+    } catch (err: any) {
+      console.error('Failed to update package: ', err);
+      alert(`Gagal merubah package: ${err.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -568,6 +599,8 @@ export const LicenseScreen: React.FC = () => {
 
   const handleOpenDetailModal = (lic: License) => {
     setSelectedLicense(lic);
+    setEditAppId(lic.application_id || '');
+    setIsEditingPackage(false);
     setIsDetailModalOpen(true);
   };
 
@@ -794,54 +827,6 @@ export const LicenseScreen: React.FC = () => {
                         >
                           Detail
                         </button>
-
-                        <button
-                          disabled={actionLoading !== null}
-                          onClick={() => handleOpenRenewModal(lic)}
-                          className="bg-sky-50 hover:bg-[#0EA5E9] hover:text-white border border-sky-100 hover:border-transparent text-[10px] font-bold text-sky-600 px-2 py-1 rounded-lg transition-all duration-300"
-                        >
-                          Renew
-                        </button>
-
-                        {isActive && (
-                          <button
-                            disabled={actionLoading !== null}
-                            onClick={() => handleSuspend(lic.id)}
-                            className="bg-white hover:bg-red-500 hover:text-white border border-gray-200 hover:border-transparent text-[10px] font-bold text-[#1E293B] px-2 py-1 rounded-lg transition-all duration-300"
-                          >
-                            Suspend
-                          </button>
-                        )}
-
-                        {lic.status === 'SUSPENDED' && (
-                          <button
-                            disabled={actionLoading !== null}
-                            onClick={() => handleOpenSuspend(lic.id)}
-                            className="bg-emerald-50 hover:bg-emerald-500 hover:text-white border border-emerald-200 hover:border-transparent text-[10px] font-bold text-emerald-600 px-2 py-1 rounded-lg transition-all duration-300 inline-flex items-center space-x-1"
-                          >
-                            <Unlock className="w-3 h-3" />
-                            <span>Activate</span>
-                          </button>
-                        )}
-                        
-                        {lic.associated_device && lic.associated_device !== 'UNBOUND' && (
-                          <button
-                            disabled={actionLoading !== null}
-                            onClick={() => handleResetDevice(lic.id)}
-                            className="bg-white hover:bg-gray-100 border border-gray-200 text-[10px] font-bold text-[#1E293B] px-2 py-1 rounded-lg transition-all duration-300"
-                          >
-                            Reset Device
-                          </button>
-                        )}
-
-                        <button
-                          disabled={actionLoading !== null}
-                          onClick={() => handleDeleteLicense(lic.id)}
-                          className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-150 hover:border-transparent text-[10px] font-bold text-red-600 px-2 py-1 rounded-lg transition-all duration-300 inline-flex items-center space-x-1 animate-pulse"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Delete</span>
-                        </button>
                       </td>
                     </tr>
                   );
@@ -938,53 +923,6 @@ export const LicenseScreen: React.FC = () => {
                     className="bg-slate-100 hover:bg-[#1E293B] hover:text-white text-slate-600 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all"
                   >
                     Detail
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenRenewModal(lic)}
-                    className="bg-sky-50 hover:bg-[#0EA5E9] hover:text-white text-sky-600 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all"
-                  >
-                    Renew
-                  </button>
-
-                  {isActive && (
-                    <button
-                      disabled={actionLoading !== null}
-                      onClick={() => handleSuspend(lic.id)}
-                      className="bg-white hover:bg-red-500 hover:text-white border border-gray-200 text-[10px] font-bold text-[#1E293B] px-3 py-1.5 rounded-lg transition-all"
-                    >
-                      Suspend
-                    </button>
-                  )}
-
-                  {lic.status === 'SUSPENDED' && (
-                    <button
-                      disabled={actionLoading !== null}
-                      onClick={() => handleOpenSuspend(lic.id)}
-                      className="bg-emerald-50 hover:bg-emerald-500 hover:text-white border border-emerald-200 text-[10px] font-bold text-emerald-600 px-3 py-1.5 rounded-lg transition-all inline-flex items-center space-x-1"
-                    >
-                      <Unlock className="w-3 h-3" />
-                      <span>Activate</span>
-                    </button>
-                  )}
-                  
-                  {lic.associated_device && lic.associated_device !== 'UNBOUND' && (
-                    <button
-                      disabled={actionLoading !== null}
-                      onClick={() => handleResetDevice(lic.id)}
-                      className="bg-white hover:bg-gray-100 border border-gray-200 text-[10px] font-bold text-[#1E293B] px-3 py-1.5 rounded-lg transition-all"
-                    >
-                      Reset
-                    </button>
-                  )}
-
-                  <button
-                    disabled={actionLoading !== null}
-                    onClick={() => handleDeleteLicense(lic.id)}
-                    className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-200 text-[10px] font-bold text-red-600 px-3 py-1.5 rounded-lg transition-all inline-flex items-center space-x-1"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Delete</span>
                   </button>
                 </div>
               </div>
@@ -1231,12 +1169,36 @@ export const LicenseScreen: React.FC = () => {
                   )}
                   
                   <div>
-                    <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Package / Application</label>
-                    <span className="text-xs font-bold text-[#1E293B] block">
-                      {selectedLicense.applications 
-                        ? `${selectedLicense.applications.app_name} (${selectedLicense.applications.package_name})` 
-                        : '-'}
-                    </span>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider block">Package / Application</label>
+                      {!isEditingPackage ? (
+                        <button onClick={() => setIsEditingPackage(true)} className="text-[9px] text-[#0EA5E9] font-bold hover:underline">Change</button>
+                      ) : (
+                        <div className="space-x-2">
+                          <button onClick={() => setIsEditingPackage(false)} className="text-[9px] text-gray-400 font-bold hover:underline">Cancel</button>
+                          <button onClick={() => handleUpdateApplication(selectedLicense.id)} className="text-[9px] text-emerald-600 font-bold hover:underline" disabled={actionLoading !== null}>Save</button>
+                        </div>
+                      )}
+                    </div>
+                    {!isEditingPackage ? (
+                      <span className="text-xs font-bold text-[#1E293B] block mt-0.5">
+                        {selectedLicense.applications 
+                          ? `${selectedLicense.applications.app_name} (${selectedLicense.applications.package_name})` 
+                          : '-'}
+                      </span>
+                    ) : (
+                      <select
+                        value={editAppId}
+                        onChange={(e) => setEditAppId(e.target.value)}
+                        className="mt-1 w-full bg-white border border-gray-200 rounded text-[10px] text-[#1E293B] p-1.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold cursor-pointer"
+                        disabled={actionLoading !== null}
+                      >
+                        <option value="">-- No Application (Universal) --</option>
+                        {appsList.map(app => (
+                          <option key={app.id} value={app.id}>{app.app_name} ({app.package_name})</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   <div className="border-t border-gray-200/60 pt-3 mt-3 space-y-2">
@@ -1293,13 +1255,63 @@ export const LicenseScreen: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-2 border-t border-gray-100 flex justify-end">
+            <div className="pt-3 border-t border-gray-100 flex flex-wrap gap-2 justify-end">
               <button
-                onClick={() => setIsDetailModalOpen(false)}
-                className="w-full bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-xs py-3 rounded-xl transition-all duration-300 shadow-md uppercase tracking-wide border-none"
+                disabled={actionLoading !== null}
+                onClick={() => { setIsDetailModalOpen(false); handleOpenRenewModal(selectedLicense); }}
+                className="bg-sky-50 hover:bg-[#0EA5E9] hover:text-white border border-sky-100 hover:border-transparent text-[10px] font-bold text-sky-600 px-3 py-1.5 rounded-lg transition-all duration-300"
               >
-                Close View
+                Renew
               </button>
+
+              {selectedLicense.status === 'ACTIVE' && (
+                <button
+                  disabled={actionLoading !== null}
+                  onClick={() => { handleSuspend(selectedLicense.id); setSelectedLicense({...selectedLicense, status: 'SUSPENDED'}); }}
+                  className="bg-white hover:bg-red-500 hover:text-white border border-gray-200 hover:border-transparent text-[10px] font-bold text-[#1E293B] px-3 py-1.5 rounded-lg transition-all duration-300"
+                >
+                  Suspend
+                </button>
+              )}
+
+              {selectedLicense.status === 'SUSPENDED' && (
+                <button
+                  disabled={actionLoading !== null}
+                  onClick={() => { handleOpenSuspend(selectedLicense.id); setSelectedLicense({...selectedLicense, status: 'ACTIVE'}); }}
+                  className="bg-emerald-50 hover:bg-emerald-500 hover:text-white border border-emerald-200 hover:border-transparent text-[10px] font-bold text-emerald-600 px-3 py-1.5 rounded-lg transition-all duration-300 inline-flex items-center space-x-1"
+                >
+                  <Unlock className="w-3 h-3" />
+                  <span>Activate</span>
+                </button>
+              )}
+
+              {selectedLicense.associated_device && selectedLicense.associated_device !== 'UNBOUND' && (
+                <button
+                  disabled={actionLoading !== null}
+                  onClick={() => { handleResetDevice(selectedLicense.id); setSelectedLicense({...selectedLicense, associated_device: 'UNBOUND', status: 'PENDING', activated_at: null, expires_at: null}); }}
+                  className="bg-white hover:bg-gray-100 border border-gray-200 text-[10px] font-bold text-[#1E293B] px-3 py-1.5 rounded-lg transition-all duration-300"
+                >
+                  Reset Device
+                </button>
+              )}
+
+              <button
+                disabled={actionLoading !== null}
+                onClick={() => { handleDeleteLicense(selectedLicense.id); setIsDetailModalOpen(false); }}
+                className="bg-red-50 hover:bg-red-500 hover:text-white border border-red-150 hover:border-transparent text-[10px] font-bold text-red-600 px-3 py-1.5 rounded-lg transition-all duration-300 inline-flex items-center space-x-1 animate-pulse"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Delete</span>
+              </button>
+
+              <div className="w-full mt-2">
+                <button
+                  onClick={() => setIsDetailModalOpen(false)}
+                  className="w-full bg-[#1E293B] hover:bg-[#1E293B]/90 text-white font-bold text-xs py-2 rounded-xl transition-all duration-300 shadow-md uppercase tracking-wide border-none"
+                >
+                  Close View
+                </button>
+              </div>
             </div>
           </div>
         </div>
