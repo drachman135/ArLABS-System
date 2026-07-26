@@ -148,8 +148,7 @@ export const HelpCenterScreen: React.FC = () => {
         key: itemKey.trim() || null,
         url: url.trim() || null,
         parent_id: parentId ? parentId : null,
-        order: parseInt(itemOrder, 10) || 0,
-        updated_at: new Date().toISOString()
+        order: parseInt(itemOrder, 10) || 0
       };
 
       if (editingItem) {
@@ -169,10 +168,7 @@ export const HelpCenterScreen: React.FC = () => {
       } else {
         const { error } = await supabase
           .from('help_center_hierarchy')
-          .insert([{
-            ...payload,
-            created_at: new Date().toISOString()
-          }]);
+          .insert([payload]);
 
         if (error) throw error;
 

@@ -64,6 +64,7 @@ Deno.serve(async (req) => {
 
     const rawLicenseKey = body.license_key;
     const rawSecureDeviceId = body.secure_device_id || body.device_id;
+    const rawPackageName = body.package_name;
 
     if (!rawLicenseKey || typeof rawLicenseKey !== 'string') {
       return new Response(
@@ -76,8 +77,20 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (!rawPackageName || typeof rawPackageName !== 'string') {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'MISSING_PACKAGE_NAME',
+          message: 'package_name is required and must be a string.',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const licenseKey = rawLicenseKey.trim().toUpperCase();
     const secureDeviceId = rawSecureDeviceId ? rawSecureDeviceId.trim() : null;
+    const packageName = rawPackageName.trim();
 
     if (!licenseKey) {
       return new Response(
@@ -85,6 +98,17 @@ Deno.serve(async (req) => {
           success: false,
           code: 'INVALID_LICENSE_KEY_FORMAT',
           message: 'license_key cannot be empty or whitespaces.',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!packageName) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'INVALID_PACKAGE_NAME_FORMAT',
+          message: 'package_name cannot be empty or whitespaces.',
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -112,7 +136,7 @@ Deno.serve(async (req) => {
     console.log(`[${timestamp}] Querying license: ${licenseKey}`);
     const { data: license, error: fetchError } = await supabase
       .from('licenses')
-      .select('*')
+      .select('*, applications(package_name)')
       .eq('license_key', licenseKey)
       .maybeSingle();
 
@@ -214,6 +238,23 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    }
+
+    // 5.5 Package name check
+    if (license.applications && license.applications.package_name) {
+      if (license.applications.package_name !== packageName) {
+        console.log(`[${timestamp}] Package name conflict. License is for ${license.applications.package_name}, request sent from ${packageName}`);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'LICENSE_APPLICATION_MISMATCH',
+            message: 'This license is not valid for this application package.',
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      console.log(`[${timestamp}] License has no specific package_name bound. Allowing universal access.`);
     }
 
     // 6. Update last_validation timestamp
