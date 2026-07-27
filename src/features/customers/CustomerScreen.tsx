@@ -31,6 +31,7 @@ export const CustomerScreen: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activationLogs, setActivationLogs] = useState<ActivationLog[]>([]);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
+  const [customerLicenses, setCustomerLicenses] = useState<any[]>([]);
 
   // Register Customer modal state
   const [showRegModal, setShowRegModal] = useState<boolean>(false);
@@ -75,17 +76,18 @@ export const CustomerScreen: React.FC = () => {
   const fetchActivationHistory = async (customer: any) => {
     setLogsLoading(true);
     const { data, error } = await supabase
-      .from('license_activations')
-      .select('id, ip_address, created_at, status')
-      .eq('customer_id', customer.id)
+      .from('devices')
+      .select('id, created_at, model, secure_device_id, licenses!inner(customer_id)')
+      .eq('licenses.customer_id', customer.id)
       .order('created_at', { ascending: false });
+    
     if (!error && data) {
       setActivationLogs(data.map((log: any) => ({
         id: log.id,
-        device_name: log.device_name || 'POS_TERMINAL',
-        ip_address: log.ip_address || '127.0.0.1',
+        device_name: log.model || 'Unknown Device',
+        ip_address: log.secure_device_id ? `HWID: ${log.secure_device_id.substring(0, 10)}` : 'UNKNOWN',
         activated_at: new Date(log.created_at).toLocaleString(),
-        status: log.status
+        status: 'SUCCESS'
       })));
     } else {
       setActivationLogs([]);
@@ -93,9 +95,24 @@ export const CustomerScreen: React.FC = () => {
     setLogsLoading(false);
   };
 
+  const fetchCustomerLicenses = async (customer: any) => {
+    const { data, error } = await supabase
+      .from('licenses')
+      .select('id, license_key, status, applications(app_name, package_name)')
+      .eq('customer_id', customer.id)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+       setCustomerLicenses(data);
+    } else {
+       setCustomerLicenses([]);
+    }
+  };
+
   const handleSelectCustomer = (customer: any) => {
     setSelectedCustomer(customer);
     fetchActivationHistory(customer);
+    fetchCustomerLicenses(customer);
   };
 
   // Register Customer + Generate license transaction
@@ -108,19 +125,31 @@ export const CustomerScreen: React.FC = () => {
     const whatsapp = newCustWhatsapp;
 
     try {
-      // Step A: Insert into public.customers using array mapping
-      const { data: insertedRows, error: customerError } = await supabase
+      let customerId;
+
+      // Check if customer with same email exists
+      const { data: existingCustomer } = await supabase
         .from('customers')
-        .insert([{ name, email, whatsapp }])
-        .select();
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
 
-      if (customerError || !insertedRows || insertedRows.length === 0) {
-        console.error("DETAILED CUSTOMER ERROR:", customerError);
-        alert(`Failed to register customer: ${customerError?.message || 'Unknown network error'}`);
-        return;
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+      } else {
+        // Step A: Insert into public.customers using array mapping
+        const { data: insertedRows, error: customerError } = await supabase
+          .from('customers')
+          .insert([{ name, email, whatsapp }])
+          .select();
+
+        if (customerError || !insertedRows || insertedRows.length === 0) {
+          console.error("DETAILED CUSTOMER ERROR:", customerError);
+          alert(`Failed to register customer: ${customerError?.message || 'Unknown network error'}`);
+          return;
+        }
+        customerId = insertedRows[0].id;
       }
-
-      const newCustomer = insertedRows[0];
 
       // Step B: Generate the random 16-character key string
       const generateRandomKey = () => {
@@ -130,7 +159,7 @@ export const CustomerScreen: React.FC = () => {
       };
       const generatedKeyVal = generateRandomKey();
 
-      // Step C: Insert into public.licenses linked to newCustomer.id
+      // Step C: Insert into public.licenses linked to customerId
       const { error: licenseError } = await supabase
         .from('licenses')
         .insert([{
@@ -138,7 +167,7 @@ export const CustomerScreen: React.FC = () => {
           license_type: 'LIFETIME',
           type: 'LIFETIME',
           status: 'PENDING',
-          customer_id: newCustomer.id,
+          customer_id: customerId,
           associated_device: 'UNBOUND',
           created_at: new Date().toISOString()
         }]);
@@ -217,8 +246,12 @@ export const CustomerScreen: React.FC = () => {
   const handleDeleteSingle = async (customer: Customer) => {
     setDeleting(true);
     try {
-      // Delete license activations linked to licenses of this customer
-      await supabase.from('license_activations').delete().eq('customer_id', customer.id);
+      // Fetch licenses to delete associated devices
+      const { data: customerLicenses } = await supabase.from('licenses').select('id').eq('customer_id', customer.id);
+      if (customerLicenses && customerLicenses.length > 0) {
+        const licenseIds = customerLicenses.map((l: any) => l.id);
+        await supabase.from('devices').delete().in('license_id', licenseIds);
+      }
       // Delete licenses of this customer
       await supabase.from('licenses').delete().eq('customer_id', customer.id);
       // Delete the customer record itself
@@ -241,7 +274,11 @@ export const CustomerScreen: React.FC = () => {
     if (selectedForDelete.length === 0) return;
     setDeleting(true);
     try {
-      await supabase.from('license_activations').delete().in('customer_id', selectedForDelete);
+      const { data: bulkLicenses } = await supabase.from('licenses').select('id').in('customer_id', selectedForDelete);
+      if (bulkLicenses && bulkLicenses.length > 0) {
+        const licenseIds = bulkLicenses.map((l: any) => l.id);
+        await supabase.from('devices').delete().in('license_id', licenseIds);
+      }
       await supabase.from('licenses').delete().in('customer_id', selectedForDelete);
       const { error } = await supabase.from('customers').delete().in('id', selectedForDelete);
       if (error) throw error;
@@ -291,7 +328,6 @@ export const CustomerScreen: React.FC = () => {
               className="bg-white border border-gray-200 rounded-xl text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] transition-all duration-300 font-semibold cursor-pointer shadow-sm"
             >
               <option value="created_at">Sort by Date</option>
-              <option value="license_count">Sort by Active Licenses</option>
             </select>
           </div>
 
@@ -352,7 +388,6 @@ export const CustomerScreen: React.FC = () => {
                     <th className="py-4 px-6">Email Address</th>
                     <th className="py-4 px-6">WhatsApp</th>
                     <th className="py-4 px-6">Ecommerce</th>
-                    <th className="py-4 px-6">Active Licenses</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Registration Date</th>
                     <th className="py-4 px-4 text-center w-12">Aksi</th>
@@ -407,11 +442,6 @@ export const CustomerScreen: React.FC = () => {
                           {/* Ecommerce */}
                           <td className="py-4 px-6 font-mono text-[11px] text-[#64748B]">
                             {cust.phone || '-'}
-                          </td>
-
-                          {/* License count */}
-                          <td className="py-4 px-6 font-mono text-xs font-bold text-[#0EA5E9] pl-10">
-                            {cust.license_count}
                           </td>
 
                           {/* Status */}
@@ -492,10 +522,6 @@ export const CustomerScreen: React.FC = () => {
                         <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">{cust.whatsapp}</span>
                       </div>
                       <div>
-                        <span className="block font-semibold text-[8px] text-gray-400 uppercase">Active Licenses</span>
-                        <span className="font-bold text-[#0EA5E9] font-mono text-xs">{cust.license_count}</span>
-                      </div>
-                      <div>
                         <span className="block font-semibold text-[8px] text-gray-400 uppercase">Ecommerce</span>
                         <span className="font-mono text-[#1E293B] block truncate max-w-[120px]">{cust.phone || '-'}</span>
                       </div>
@@ -571,7 +597,44 @@ export const CustomerScreen: React.FC = () => {
                     <p className="text-xs font-mono text-[#64748B]">{selectedCustomer.phone}</p>
                   </div>
                 )}
+                <div>
+                  <label className="text-[9px] text-[#64748B] uppercase font-bold tracking-wider">Active Licenses</label>
+                  <p className="text-sm font-black text-[#0EA5E9] font-mono">{selectedCustomer.license_count}</p>
+                </div>
               </div>
+
+              {/* Registered Licenses */}
+              {customerLicenses.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2 text-[#64748B]">
+                    <span className="text-xs font-bold uppercase tracking-wider">Lisensi Terdaftar</span>
+                  </div>
+                  <div className="space-y-2">
+                    {customerLicenses.map((lic, idx) => {
+                      const isActive = lic.status === 'ACTIVE';
+                      const isSuspended = lic.status === 'SUSPENDED';
+                      const isExpired = lic.status === 'EXPIRED';
+
+                      let statusBadge = 'bg-gray-50 text-gray-500 border border-gray-200';
+                      if (isActive) statusBadge = 'bg-sky-50 text-sky-600 border border-sky-100';
+                      if (isSuspended) statusBadge = 'bg-orange-50 text-orange-600 border border-orange-100';
+                      if (isExpired) statusBadge = 'bg-red-50 text-red-600 border border-red-100';
+
+                      return (
+                        <div key={idx} className="bg-white border border-gray-100 p-3 rounded-xl flex justify-between items-center shadow-sm">
+                          <div>
+                            <p className="text-[11px] font-bold text-[#1E293B]">{lic.applications?.app_name || 'Premium License'}</p>
+                            <p className="text-[9px] font-mono text-[#64748B] mt-0.5">{lic.license_key}</p>
+                          </div>
+                          <span className={`px-2 py-1 rounded-md text-[8px] font-bold tracking-wider uppercase ${statusBadge}`}>
+                            {lic.status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Activation Logs (History) */}
               <div className="space-y-4">
