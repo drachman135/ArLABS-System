@@ -424,7 +424,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               items: [
                 { id: 'notifications', label: 'Notifikasi Mengambang', icon: Bell, views: ['notifications'], badge: null },
                 { id: 'announcements', label: 'Notifikasi Diaplikasi', icon: MessageSquare, views: ['announcements'], badge: null },
-                { id: 'config', label: 'Konfigurasi Jarak Jauh', icon: RefreshCw, views: ['config'], badge: null },
+                { id: 'config', label: 'Konfigurasi Jarak Jauh', icon: RefreshCw, views: ['config'], badge: null }
+              ]
+            },
+            {
+              title: 'Website',
+              items: [
                 { id: 'help_center', label: 'Manajemen Pusat Bantuan', icon: HelpCircle, views: ['help_center'], badge: null }
               ]
             },

@@ -17,6 +17,8 @@ interface Announcement {
   content: string;
   type: 'CARD' | 'MODAL' | 'IMAGE_ONLY' | 'TOP_BANNER';
   image_url: string | null;
+  cta_text: string | null;
+  cta_url: string | null;
   start_date: string;
   end_date: string;
   created_at: string;
@@ -37,6 +39,8 @@ export const AnnouncementScreen: React.FC = () => {
   // Form states
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
+  const [ctaText, setCtaText] = useState<string>('');
+  const [ctaUrl, setCtaUrl] = useState<string>('');
   const [type, setType] = useState<'CARD' | 'MODAL' | 'IMAGE_ONLY' | 'TOP_BANNER'>('CARD');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [startDate, setStartDate] = useState<string>('');
@@ -179,6 +183,24 @@ export const AnnouncementScreen: React.FC = () => {
     }
   };
 
+  // Helper for quick date selection
+  const setQuickSchedule = (daysToAdd: number) => {
+    const start = new Date();
+    start.setSeconds(0, 0); // Reset seconds
+    
+    const formatForInput = (d: Date) => {
+      const pad = (n: number) => n < 10 ? '0' + n : n;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    setStartDate(formatForInput(start));
+
+    if (daysToAdd > 0) {
+      const end = new Date(start.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
+      setEndDate(formatForInput(end));
+    }
+  };
+
   // Open confirmation modal
   const handleCreateAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
@@ -241,6 +263,8 @@ export const AnnouncementScreen: React.FC = () => {
             content,
             type,
             image_url: imageUrl,
+            cta_text: ctaText.trim() || null,
+            cta_url: ctaUrl.trim() || null,
             start_date: new Date(startDate).toISOString(),
             end_date: new Date(endDate).toISOString(),
             target_type: targetType,
@@ -258,6 +282,8 @@ export const AnnouncementScreen: React.FC = () => {
       // Reset form fields
       setTitle('');
       setContent('');
+      setCtaText('');
+      setCtaUrl('');
       setType('CARD');
       setImageFile(null);
       setStartDate('');
@@ -386,6 +412,34 @@ export const AnnouncementScreen: React.FC = () => {
               />
             </div>
 
+            {/* CTA Button Inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="space-y-2">
+                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
+                  Teks Tombol CTA (Opsional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Misal: Buka Promo"
+                  value={ctaText}
+                  onChange={(e) => setCtaText(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
+                  Link / URL CTA (Opsional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="Misal: https://arlabs.id"
+                  value={ctaUrl}
+                  onChange={(e) => setCtaUrl(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-mono"
+                />
+              </div>
+            </div>
+
             {/* Target Scope Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="space-y-2">
@@ -469,8 +523,42 @@ export const AnnouncementScreen: React.FC = () => {
                 />
               </div>
 
-              {/* Dummy spacing to align form grids */}
-              <div className="hidden md:block"></div>
+              {/* Quick Scheduling Actions */}
+              <div className="space-y-2">
+                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
+                  Quick Schedulers (Isi Cepat)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule(1)}
+                    className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-600 border border-sky-100 rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95"
+                  >
+                    1 Hari
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule(3)}
+                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95"
+                  >
+                    3 Hari
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule(7)}
+                    className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-100 rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95"
+                  >
+                    1 Minggu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickSchedule(30)}
+                    className="px-2.5 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-600 border border-pink-100 rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95"
+                  >
+                    1 Bulan
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Media Upload Area */}

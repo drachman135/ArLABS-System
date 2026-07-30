@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { 
   MessageSquare, Search, RefreshCw, Terminal, 
   CheckCircle2, X, ChevronRight, ChevronLeft, Calendar, 
-  Eye, ShieldAlert, ArrowRight, UserCheck, AlertTriangle
+  Eye, ShieldAlert, ArrowRight, UserCheck, AlertTriangle, Send, User, Shield, CheckCheck, Info
 } from 'lucide-react';
 import { 
   fetchFeedbackStats, 
@@ -283,6 +283,18 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
       setIsBulkActionLoading(false);
     }
   };
+
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+  
+  useEffect(() => {
+    if (activeTabDetail === 'chat') {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [messages, activeTabDetail]);
 
   // Real-time listener for incoming messages on the selected feedback report
   useEffect(() => {
@@ -871,69 +883,103 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
 
                   {/* TAB 1: Chat/Obrolan dengan Klien */}
                   {activeTabDetail === 'chat' && (
-                    <div className="space-y-4 font-sans">
-                      {/* Messages Thread Box */}
-                      <div className="bg-slate-50 border border-gray-200/50 rounded-2xl p-4 h-[300px] overflow-y-auto flex flex-col space-y-3">
+                    <div className="flex flex-col h-[500px] bg-[#E5DDD5] rounded-[24px] overflow-hidden shadow-inner relative border border-gray-200/60 font-sans">
+                      
+                      {/* Chat Header (WhatsApp style) */}
+                      <div className="bg-[#F0F2F5] px-4 py-3 flex items-center justify-between border-b border-gray-200/60 z-10 shrink-0 shadow-sm">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center border-2 border-white shadow-sm overflow-hidden shrink-0">
+                            <User className="w-5 h-5 text-gray-500" />
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[13px] font-bold text-[#111B21] truncate">{detail.application_name || 'Klien Aplikasi'}</span>
+                            <span className="text-[11px] text-[#667781] truncate">
+                              {detail.whatsapp ? `Wa: ${detail.whatsapp}` : 'sedang aktif'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1 text-[#54656F]">
+                          <button type="button" className="p-2 hover:bg-gray-200 rounded-full transition-colors"><Search className="w-4 h-4" /></button>
+                          <button type="button" className="p-2 hover:bg-gray-200 rounded-full transition-colors"><Info className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+
+                      {/* Messages Thread Box (WhatsApp wallpaper vibe) */}
+                      <div 
+                        className="flex-1 overflow-y-auto p-4 flex flex-col space-y-2 relative"
+                        style={{ backgroundColor: '#efeae2', backgroundImage: 'radial-gradient(#d5ceca 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+                      >
                         {loadingMessages ? (
-                          <div className="flex flex-col items-center justify-center h-full space-y-2 text-[#94a3b8]">
-                            <RefreshCw className="w-5 h-5 animate-spin text-[#0EA5E9]" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Memuat percakapan...</span>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#efeae2]/50 backdrop-blur-sm z-10 space-y-2">
+                            <div className="bg-white p-3 rounded-full shadow-md">
+                              <RefreshCw className="w-5 h-5 animate-spin text-[#00A884]" />
+                            </div>
                           </div>
                         ) : messages.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-full text-center p-6 text-[#94a3b8] space-y-2">
-                            <MessageSquare className="w-8 h-8 text-gray-300" />
-                            <p className="text-[11px] font-bold text-[#1E293B]">Belum Ada Percakapan</p>
-                            <p className="text-[9px] leading-normal text-[#94a3b8]">Kirim balasan pertama Anda di bawah untuk membuka komunikasi 1-on-1 dengan klien.</p>
+                          <div className="flex justify-center mt-4">
+                            <div className="bg-[#FFEECD] text-[#54656F] text-[11px] px-4 py-2 rounded-xl shadow-sm text-center max-w-[85%] leading-relaxed border border-[#FAD686]/30">
+                              <ShieldAlert className="w-3.5 h-3.5 inline-block mr-1 mb-0.5 text-[#8F7437]" />
+                              Pesan ini diamankan secara end-to-end (simulasi). Hanya Anda dan klien ini yang dapat membacanya.
+                            </div>
                           </div>
                         ) : (
-                          messages.map((msg) => {
+                          messages.map((msg, index) => {
                             const isAdmin = msg.sender_type === 'ADMIN';
                             return (
                               <div
                                 key={msg.id}
-                                className={`flex flex-col max-w-[85%] ${
-                                  isAdmin ? 'self-end items-end' : 'self-start items-start'
-                                }`}
+                                className={`flex w-full ${isAdmin ? 'justify-end' : 'justify-start'} group mb-1`}
                               >
-                                <span className="text-[8.5px] font-bold text-[#94a3b8] uppercase mb-1 px-1">
-                                  {msg.sender_name}
-                                </span>
                                 <div
-                                  className={`p-3 rounded-2xl text-xs font-semibold leading-relaxed shadow-sm ${
+                                  className={`relative max-w-[85%] px-3 pt-2 pb-4 text-[13px] shadow-sm flex flex-col ${
                                     isAdmin
-                                      ? 'bg-gradient-to-br from-[#0EA5E9] to-[#38bdf8] text-white rounded-tr-none'
-                                      : 'bg-white text-[#1E293B] border border-gray-100 rounded-tl-none'
+                                      ? 'bg-[#D9FDD3] text-[#111B21] rounded-2xl rounded-tr-sm'
+                                      : 'bg-white text-[#111B21] rounded-2xl rounded-tl-sm'
                                   }`}
                                 >
-                                  {msg.message}
+                                  {/* Triangle Tail */}
+                                  <div className={`absolute top-0 w-3 h-3 ${isAdmin ? '-right-1.5 bg-[#D9FDD3]' : '-left-1.5 bg-white'}`} style={{ clipPath: isAdmin ? 'polygon(0 0, 100% 0, 0 100%)' : 'polygon(0 0, 100% 0, 100% 100%)' }}></div>
+                                  
+                                  {/* Message Body */}
+                                  <span className="leading-relaxed whitespace-pre-wrap z-10 pr-6">{msg.message}</span>
+                                  
+                                  {/* Timestamp & Read Tick */}
+                                  <div className="absolute bottom-1 right-2 flex items-center space-x-1 z-10">
+                                    <span className="text-[9px] text-[#667781] font-medium">
+                                      {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    {isAdmin && <CheckCheck className="w-3.5 h-3.5 text-[#53BDEB]" />}
+                                  </div>
                                 </div>
-                                <span className="text-[7.5px] text-[#94a3b8] font-mono mt-1 px-1">
-                                  {new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                                </span>
                               </div>
                             );
                           })
                         )}
+                        <div ref={messagesEndRef} />
                       </div>
 
-                      {/* Message Input Box */}
-                      <form onSubmit={handleSendReply} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="Ketik balasan Anda ke perangkat klien..."
-                          className="flex-grow px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:ring-1 focus:ring-[#0EA5E9] focus:border-[#0EA5E9] outline-none font-medium"
-                        />
+                      {/* Message Input Box (WhatsApp style) */}
+                      <form onSubmit={handleSendReply} className="bg-[#F0F2F5] px-3 py-3 flex items-end space-x-2 shrink-0 z-10">
+                        <div className="flex-1 bg-white rounded-2xl flex items-center px-2 py-1 shadow-sm border border-transparent focus-within:border-gray-200 min-h-[44px]">
+                          <input
+                            type="text"
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder="Ketik pesan"
+                            className="flex-1 bg-transparent px-3 py-2 text-[14px] outline-none text-[#111B21] placeholder-[#8696A0]"
+                          />
+                        </div>
                         <button
                           type="submit"
                           disabled={sendingReply || !replyText.trim()}
-                          className="bg-[#1E293B] hover:bg-[#2d3a4f] disabled:opacity-40 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all active:scale-95 flex items-center justify-center font-sans select-none"
+                          className={`p-3 rounded-full flex items-center justify-center transition-all min-h-[44px] min-w-[44px] ${
+                            replyText.trim() && !sendingReply ? 'bg-[#00A884] text-white hover:bg-[#008f6f] shadow-md active:scale-95' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          }`}
                         >
                           {sendingReply ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <RefreshCw className="w-5 h-5 animate-spin" />
                           ) : (
-                            <span>Kirim</span>
+                            <Send className="w-5 h-5 ml-0.5" />
                           )}
                         </button>
                       </form>
