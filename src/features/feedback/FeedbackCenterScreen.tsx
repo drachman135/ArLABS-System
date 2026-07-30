@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { 
   MessageSquare, Search, RefreshCw, Terminal, 
   CheckCircle2, X, ChevronRight, ChevronLeft, Calendar, 
-  Eye, ShieldAlert, ArrowRight, UserCheck, AlertTriangle, Send, User, Shield, CheckCheck, Info
+  Eye, ShieldAlert, ArrowRight, UserCheck, AlertTriangle, Send, User, CheckCheck, Info
 } from 'lucide-react';
 import { 
   fetchFeedbackStats, 
@@ -923,7 +923,7 @@ export const FeedbackCenterScreen: React.FC<FeedbackCenterScreenProps> = ({ sess
                             </div>
                           </div>
                         ) : (
-                          messages.map((msg, index) => {
+                          messages.map((msg) => {
                             const isAdmin = msg.sender_type === 'ADMIN';
                             return (
                               <div
