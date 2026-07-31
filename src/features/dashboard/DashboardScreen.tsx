@@ -333,12 +333,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         if (!notesError && allNotes) {
           let totalUncheckedTasks = 0;
           for (const note of allNotes) {
-            const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
+            const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
             if (lines.length === 0) {
               // Jika catatan kosong namun belum ditandai selesai/hijau, anggap sebagai 1 tugas yang belum selesai.
               totalUncheckedTasks++;
             } else {
-              lines.forEach(l => {
+              lines.forEach((l: string) => {
                 if (!l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/)) {
                   totalUncheckedTasks++;
                 }

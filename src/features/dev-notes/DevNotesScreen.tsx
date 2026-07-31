@@ -4,7 +4,6 @@ import {
   Plus, 
   Search, 
   Filter, 
-  MoreVertical, 
   Edit2, 
   Trash2, 
   CheckCircle2, 
@@ -12,7 +11,6 @@ import {
   AlertCircle, 
   Tag, 
   X,
-  Smartphone,
   ChevronDown,
   GripVertical,
   ArrowDownUp,
@@ -47,7 +45,6 @@ interface DevNote {
 export const DevNotesScreen: React.FC = () => {
   const [apps, setApps] = useState<Application[]>([]);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
-  const [appsLoading, setAppsLoading] = useState(true);
   const [appStatuses, setAppStatuses] = useState<Record<string, 'RED' | 'GREEN'>>({});
   
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -107,7 +104,6 @@ export const DevNotesScreen: React.FC = () => {
     target_version: '',
     labels: []
   });
-  const [newLabelText, setNewLabelText] = useState('');
 
   useEffect(() => {
     fetchApps();
@@ -152,7 +148,6 @@ export const DevNotesScreen: React.FC = () => {
   }, [notes, selectedAppId, loading]);
 
   const fetchApps = async () => {
-    setAppsLoading(true);
     try {
       const { data, error } = await supabase
         .from('applications')
@@ -182,8 +177,8 @@ export const DevNotesScreen: React.FC = () => {
           let hasRed = false;
           
           for (const note of appNoteList) {
-            const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
-            const hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+            const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
+            const hasUnchecked = lines.length === 0 || lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
             if (hasUnchecked) {
               hasRed = true;
               break;
@@ -206,8 +201,6 @@ export const DevNotesScreen: React.FC = () => {
       }
     } catch (err) {
       console.error('Error fetching apps:', err);
-    } finally {
-      setAppsLoading(false);
     }
   };
 
@@ -251,7 +244,6 @@ export const DevNotesScreen: React.FC = () => {
         labels: []
       });
     }
-    setNewLabelText('');
     setIsModalOpen(true);
   };
 
@@ -342,23 +334,6 @@ export const DevNotesScreen: React.FC = () => {
     } catch (err) {
       console.error('Error toggling pin:', err);
       if (selectedAppId) fetchNotes(selectedAppId);
-    }
-  };
-
-  const handleUpdateStatus = async (id: string, newStatus: string) => {
-    // Optimistic update
-    setNotes(notes.map(note => note.id === id ? { ...note, status: newStatus as any } : note));
-    
-    try {
-      const { error } = await supabase
-        .from('dev_notes')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', id);
-        
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error updating status:', err);
-      if (selectedAppId) fetchNotes(selectedAppId); // revert if failed
     }
   };
 
@@ -578,16 +553,6 @@ export const DevNotesScreen: React.FC = () => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     }
   });
-
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'OPEN': return 'bg-gray-100 text-gray-800 border-gray-200';
-      case 'IN_PROGRESS': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'RESOLVED': return 'bg-green-100 text-green-800 border-green-200';
-      case 'CLOSED': return 'bg-slate-100 text-slate-600 border-slate-200';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   const getPriorityIcon = (priority: string) => {
     switch(priority) {
