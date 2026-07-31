@@ -35,6 +35,7 @@ export const NotificationScreen: React.FC = () => {
 
   // Form states
   const [title, setTitle] = useState<string>('');
+  const [subtitle, setSubtitle] = useState<string>('');
   const [body, setBody] = useState<string>('');
   const [targetType, setTargetType] = useState<NotificationLog['target_type']>('ALL');
   const [targetId, setTargetId] = useState<string>('');
@@ -151,7 +152,7 @@ export const NotificationScreen: React.FC = () => {
         .insert([
           {
             title: title,
-            body: body,
+            body: subtitle,
             message: body,
             target_type: targetType,
             target_id: targetType === 'ALL' ? null : targetId || null,
@@ -190,7 +191,7 @@ export const NotificationScreen: React.FC = () => {
 
       // If token/topic is valid, execute send
       if (targetTokenOrTopic) {
-        await sendFcmNotification(title, body, targetTokenOrTopic);
+        await sendFcmNotification(title, subtitle, targetTokenOrTopic);
         // If successful: update status to SENT
         const { error: updateErr } = await supabase
           .from('notifications')
@@ -206,6 +207,7 @@ export const NotificationScreen: React.FC = () => {
 
       // Reset form fields
       setTitle('');
+      setSubtitle('');
       setBody('');
       setScheduledTime('');
       setScheduleMode('IMMEDIATE');
@@ -287,16 +289,31 @@ export const NotificationScreen: React.FC = () => {
               />
             </div>
 
-            {/* Body */}
+            {/* Subtitle */}
             <div className="space-y-2">
               <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
-                Message Content Body
+                Notification Subtitle
               </label>
               <textarea
                 required
-                rows={3}
+                rows={2}
                 maxLength={240}
-                placeholder="Enter description message..."
+                placeholder="Enter short subtitle for notification..."
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm resize-none"
+              />
+            </div>
+
+            {/* Body */}
+            <div className="space-y-2">
+              <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
+                Message Content Body (Optional)
+              </label>
+              <textarea
+                rows={4}
+                maxLength={1000}
+                placeholder="Enter full message description..."
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm resize-none"
@@ -467,7 +484,7 @@ export const NotificationScreen: React.FC = () => {
                 {title || 'Broadcast Title Preview'}
               </h5>
               <p className="text-[10px] text-white/70 leading-normal line-clamp-3 whitespace-pre-wrap">
-                {body || 'Notification message description will update dynamically in real-time as you compose on the broadcast form...'}
+                {subtitle || 'Notification subtitle will update dynamically in real-time as you compose on the broadcast form...'}
               </p>
             </div>
           </div>

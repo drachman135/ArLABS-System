@@ -14,6 +14,7 @@ import {
 interface Announcement {
   id: string;
   title: string;
+  subtitle: string | null;
   content: string;
   type: 'CARD' | 'MODAL' | 'IMAGE_ONLY' | 'TOP_BANNER';
   image_url: string | null;
@@ -38,6 +39,7 @@ export const AnnouncementScreen: React.FC = () => {
 
   // Form states
   const [title, setTitle] = useState<string>('');
+  const [subtitle, setSubtitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
   const [ctaText, setCtaText] = useState<string>('');
   const [ctaUrl, setCtaUrl] = useState<string>('');
@@ -208,6 +210,10 @@ export const AnnouncementScreen: React.FC = () => {
       alert("Silakan tentukan masa aktif pengumuman.");
       return;
     }
+    if (type === 'IMAGE_ONLY' && !imageFile) {
+      alert("Gambar wajib diunggah untuk layout tipe IMAGE ONLY.");
+      return;
+    }
     setShowConfirmModal(true);
   };
 
@@ -259,8 +265,9 @@ export const AnnouncementScreen: React.FC = () => {
         .from('announcements')
         .insert([
           {
-            title,
-            content,
+            title: type === 'IMAGE_ONLY' ? (title.trim() || '') : title,
+            subtitle: content.trim() || null, // Map "Body Content" input to `subtitle` column (Detail message)
+            content: type === 'IMAGE_ONLY' ? (subtitle || '') : subtitle, // Map "Subtitle" input to `content` column (Card text)
             type,
             image_url: imageUrl,
             cta_text: ctaText.trim() || null,
@@ -382,14 +389,31 @@ export const AnnouncementScreen: React.FC = () => {
 
           <form onSubmit={handleCreateAnnouncement} className="bg-white/80 backdrop-blur-md border border-white/60 shadow-[6px_6px_12px_#d1d5db,-6px_-6px_12px_#ffffff] p-6 rounded-[24px] space-y-5">
             
-            {/* Title */}
-            <div className="space-y-2 text-xs">
+            {/* Layout Type (Moved to top) */}
+            <div className="space-y-2 text-xs animate-fade-in">
               <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
-                Announcement Title
+                Layout Type
+              </label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as any)}
+                className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] cursor-pointer shadow-sm font-bold"
+              >
+                <option value="CARD">CARD LAYOUT</option>
+                <option value="MODAL">MODAL DIALOG</option>
+                <option value="IMAGE_ONLY">IMAGE ONLY</option>
+                <option value="TOP_BANNER">TOP BANNER</option>
+              </select>
+            </div>
+            
+            {/* Title */}
+            <div className="space-y-2 text-xs animate-fade-in">
+              <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
+                Announcement Title {type === 'IMAGE_ONLY' && '(Opsional)'}
               </label>
               <input
                 type="text"
-                required
+                required={type !== 'IMAGE_ONLY'}
                 placeholder="Enter title (e.g. Server Maintenance)"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -397,13 +421,27 @@ export const AnnouncementScreen: React.FC = () => {
               />
             </div>
 
-            {/* Content */}
-            <div className="space-y-2 text-xs">
+            {/* Subtitle */}
+            <div className="space-y-2 text-xs animate-fade-in">
               <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
-                Body Content
+                Announcement Subtitle (Opsional)
+              </label>
+              <input
+                type="text"
+                placeholder="Enter short subtitle for card preview..."
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] shadow-sm font-semibold"
+              />
+            </div>
+
+            {/* Content */}
+            <div className="space-y-2 text-xs animate-fade-in">
+              <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
+                Body Content {(type === 'TOP_BANNER' || type === 'IMAGE_ONLY') && '(Opsional)'}
               </label>
               <textarea
-                required
+                required={type !== 'TOP_BANNER' && type !== 'IMAGE_ONLY'}
                 rows={3}
                 placeholder="Enter description content..."
                 value={content}
@@ -476,25 +514,9 @@ export const AnnouncementScreen: React.FC = () => {
               )}
             </div>
 
-            {/* Type & File picker grid */}
+            {/* Scheduling Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-2">
-                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
-                  Layout Type
-                </label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as any)}
-                  className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] cursor-pointer shadow-sm font-bold"
-                >
-                  <option value="CARD">CARD LAYOUT</option>
-                  <option value="MODAL">MODAL DIALOG</option>
-                  <option value="IMAGE_ONLY">IMAGE ONLY</option>
-                  <option value="TOP_BANNER">TOP BANNER</option>
-                </select>
-              </div>
-
-              {/* Active Dates Scheduling */}
+              {/* Active Start Date */}
               <div className="space-y-2">
                 <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
                   Active Start Date
@@ -507,9 +529,8 @@ export const AnnouncementScreen: React.FC = () => {
                   className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] font-mono shadow-sm"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Active End Date */}
               <div className="space-y-2">
                 <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
                   Active End Date
@@ -522,13 +543,14 @@ export const AnnouncementScreen: React.FC = () => {
                   className="w-full bg-white border border-gray-200 rounded-lg text-xs text-[#1E293B] p-2.5 focus:outline-none focus:border-[#0EA5E9] font-mono shadow-sm"
                 />
               </div>
+            </div>
 
-              {/* Quick Scheduling Actions */}
-              <div className="space-y-2">
-                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
-                  Quick Schedulers (Isi Cepat)
-                </label>
-                <div className="flex flex-wrap gap-2">
+            {/* Quick Scheduling Actions */}
+            <div className="space-y-2 text-xs">
+              <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-wider">
+                Quick Schedulers (Isi Cepat)
+              </label>
+              <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => setQuickSchedule(1)}
@@ -559,62 +581,63 @@ export const AnnouncementScreen: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </div>
 
             {/* Media Upload Area */}
-            <div className="space-y-2 text-xs">
-              <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
-                Banner / Poster Media File
-              </label>
-              
-              <div 
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-                className={`relative w-full h-36 border-2 border-dashed rounded-2xl flex flex-col justify-center items-center transition-all duration-300 overflow-hidden ${
-                  dragActive ? 'border-[#0EA5E9] bg-[#0EA5E9]/5' : 'border-gray-300 hover:border-gray-400 bg-gray-50/50'
-                }`}
-              >
-                {imagePreviewUrl ? (
-                  <div className="absolute inset-0 w-full h-full group">
-                    <img src={imagePreviewUrl} alt="Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 flex flex-col justify-center items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-4">
-                      <p className="text-[10px] text-white font-bold mb-2 truncate max-w-full">{imageFile?.name}</p>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          setImageFile(null);
-                        }}
-                        className="bg-red-500 hover:bg-red-600 text-white font-bold text-[9px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider"
-                      >
-                        Hapus Gambar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    />
-                    <div className="text-center p-4 space-y-1">
-                      <div className="flex justify-center text-[#64748B]">
-                        <ImageIcon className="w-8 h-8 opacity-70" />
+            {type !== 'TOP_BANNER' && (
+              <div className="space-y-2 text-xs animate-fade-in">
+                <label className="block text-[9px] text-[#64748B] uppercase font-bold tracking-widest">
+                  Banner / Poster Media File
+                </label>
+                
+                <div 
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`relative w-full h-36 border-2 border-dashed rounded-2xl flex flex-col justify-center items-center transition-all duration-300 overflow-hidden ${
+                    dragActive ? 'border-[#0EA5E9] bg-[#0EA5E9]/5' : 'border-gray-300 hover:border-gray-400 bg-gray-50/50'
+                  }`}
+                >
+                  {imagePreviewUrl ? (
+                    <div className="absolute inset-0 w-full h-full group">
+                      <img src={imagePreviewUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex flex-col justify-center items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-4">
+                        <p className="text-[10px] text-white font-bold mb-2 truncate max-w-full">{imageFile?.name}</p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setImageFile(null);
+                          }}
+                          className="bg-red-500 hover:bg-red-600 text-white font-bold text-[9px] px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider"
+                        >
+                          Hapus Gambar
+                        </button>
                       </div>
-                      <p className="text-[10px] text-[#64748B] font-bold">
-                        Drag & drop image here or click to browse
-                      </p>
-                      <p className="text-[9px] text-gray-400">Supported formats: JPEG, PNG, WEBP (Max 2MB)</p>
                     </div>
-                  </>
-                )}
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      <div className="text-center p-4 space-y-1">
+                        <div className="flex justify-center text-[#64748B]">
+                          <ImageIcon className="w-8 h-8 opacity-70" />
+                        </div>
+                        <p className="text-[10px] text-[#64748B] font-bold">
+                          Drag & drop image here or click to browse
+                        </p>
+                        <p className="text-[9px] text-gray-400">Supported formats: JPEG, PNG, WEBP (Max 2MB)</p>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Action buttons */}
             <button
@@ -710,6 +733,11 @@ export const AnnouncementScreen: React.FC = () => {
                                 </a>
                               )}
                             </div>
+                            {ann.content && (
+                              <div className="text-[10px] text-[#64748B] font-normal mt-1 line-clamp-1">
+                                {ann.content}
+                              </div>
+                            )}
                           </td>
                           <td className="py-4 px-6 font-mono text-[10px] text-[#64748B] font-bold">
                             {ann.target_type === 'ALL' ? (
@@ -792,7 +820,10 @@ export const AnnouncementScreen: React.FC = () => {
                   <div key={ann.id} className="bg-white border border-gray-200/80 rounded-[20px] p-4 space-y-3 shadow-sm">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center space-x-2 pr-2">
-                        <span className="font-bold text-xs text-[#1E293B]">{ann.title}</span>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-xs text-[#1E293B]">{ann.title}</span>
+                          {ann.content && <span className="text-[10px] text-[#64748B] font-normal mt-0.5">{ann.content}</span>}
+                        </div>
                         {ann.image_url && (
                           <a 
                             href={ann.image_url} 
