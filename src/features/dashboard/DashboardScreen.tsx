@@ -16,6 +16,7 @@ import { ProductManagementScreen } from '../products/ProductManagementScreen';
 import { AddSkuModal } from '../products/AddSkuModal';
 import { MayarIntegrationScreen } from '../mayar/MayarIntegrationScreen';
 import { HelpCenterScreen } from '../help-center/HelpCenterScreen';
+import { DevNotesScreen } from '../dev-notes/DevNotesScreen';
 import {
   RefreshCw,
   Wifi,
@@ -41,7 +42,8 @@ import {
   Package,
   Plus,
   CreditCard,
-  HelpCircle
+  HelpCircle,
+  Notebook
 } from 'lucide-react';
 
 interface DashboardScreenProps {
@@ -51,7 +53,7 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products' | 'mayar' | 'help_center'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products' | 'mayar' | 'help_center' | 'dev_notes'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -79,6 +81,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   // Extra dashboard metrics & logs
   const [updatesCount, setUpdatesCount] = useState<number>(0);
   const [feedbackCount, setFeedbackCount] = useState<number>(0);
+  const [notesCount, setNotesCount] = useState<number>(0);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
 
   // Global Add SKU Modal State
@@ -323,6 +326,34 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       }
 
       try {
+        const { data: allNotes, error: notesError } = await supabase
+          .from('dev_notes')
+          .select('description');
+          
+        if (!notesError && allNotes) {
+          let totalUncheckedTasks = 0;
+          for (const note of allNotes) {
+            const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
+            if (lines.length === 0) {
+              // Jika catatan kosong namun belum ditandai selesai/hijau, anggap sebagai 1 tugas yang belum selesai.
+              totalUncheckedTasks++;
+            } else {
+              lines.forEach(l => {
+                if (!l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/)) {
+                  totalUncheckedTasks++;
+                }
+              });
+            }
+          }
+          setNotesCount(totalUncheckedTasks);
+        } else {
+          setNotesCount(0);
+        }
+      } catch (e) {
+        console.warn("Failed fetching dev notes count: ", e);
+      }
+
+      try {
         const { data: logsData } = await supabase
           .from('logs')
           .select('*')
@@ -398,13 +429,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-4 w-full">
           {[
             {
-              title: 'Main Menu',
+              title: 'Menu Utama',
               items: [
-                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, views: ['dashboard'], badge: null }
+                { id: 'dashboard', label: 'Dasbor', icon: LayoutDashboard, views: ['dashboard'], badge: null }
               ]
             },
             {
-              title: 'Registry',
+              title: 'Registrasi',
               items: [
                 { id: 'licenses', label: 'Kelola Lisensi', icon: Key, views: ['licenses'], badge: metrics.activeLicenses },
                 { id: 'customers', label: 'Klien', icon: User, views: ['customers'], badge: null },
@@ -412,7 +443,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               ]
             },
             {
-              title: 'Distribution',
+              title: 'Distribusi',
               items: [
                 { id: 'applications', label: 'Aplikasi', icon: Smartphone, views: ['applications'], badge: apps.length },
                 { id: 'updates', label: 'Pembaharuan', icon: UploadCloud, views: ['updates'], badge: updatesCount },
@@ -420,7 +451,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               ]
             },
             {
-              title: 'Broadcast',
+              title: 'Siaran',
               items: [
                 { id: 'notifications', label: 'Notifikasi Mengambang', icon: Bell, views: ['notifications'], badge: null },
                 { id: 'announcements', label: 'Notifikasi Diaplikasi', icon: MessageSquare, views: ['announcements'], badge: null },
@@ -428,24 +459,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               ]
             },
             {
-              title: 'Website',
+              title: 'Situs Web',
               items: [
                 { id: 'help_center', label: 'Manajemen Pusat Bantuan', icon: HelpCircle, views: ['help_center'], badge: null }
               ]
             },
             {
-              title: 'Payment Gateway',
+              title: 'Gerbang Pembayaran',
               items: [
                 { id: 'mayar', label: 'Integrasi Mayar', icon: CreditCard, views: ['mayar'], badge: null }
               ]
             },
             {
-              title: 'Reports',
+              title: 'Laporan',
               items: [
-                { id: 'analytics', label: 'System Analytics', icon: LayoutDashboard, views: ['analytics'], badge: null },
-                { id: 'apkstats', label: 'Download Stats', icon: Database, views: ['apkstats'], badge: null },
-                { id: 'crash', label: 'Crash Reports', icon: AlertTriangle, views: ['crash'], badge: null },
-                { id: 'feedback', label: 'User Feedback', icon: MessageSquare, views: ['feedback'], badge: feedbackCount }
+                { id: 'analytics', label: 'Analitik Sistem', icon: LayoutDashboard, views: ['analytics'], badge: null },
+                { id: 'apkstats', label: 'Statistik Unduhan', icon: Database, views: ['apkstats'], badge: null },
+                { id: 'crash', label: 'Laporan Kerusakan', icon: AlertTriangle, views: ['crash'], badge: null },
+                { id: 'feedback', label: 'Umpan Balik Pengguna', icon: MessageSquare, views: ['feedback'], badge: feedbackCount }
               ]
             }
           ].map((section, idx) => {
@@ -501,7 +532,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
             {(isSidebarPinned || isSidebarHovered) && (
-              <span className="text-xs">Sign Out</span>
+              <span className="text-xs">Keluar</span>
             )}
           </button>
         </div>
@@ -519,11 +550,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           </button>
           
           <div className="bg-[#10B981] text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-lg shadow-sm">
-            {activeView === 'dashboard' ? 'Dashboard' : activeView.toUpperCase()}
+            {activeView === 'dashboard' ? 'Dasbor' : activeView.toUpperCase()}
           </div>
 
           <span className="hidden md:inline-block text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-            Workspace // {currentTime}
+            Ruang Kerja // {currentTime}
           </span>
         </div>
 
@@ -547,7 +578,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
 
           {/* User Profile Info greeting */}
           <div className="flex items-center space-x-2.5">
-            <span className="hidden sm:inline text-gray-500 font-semibold">Hi, <strong className="text-gray-800">{profile?.name || 'Administrator'}</strong></span>
+            <span className="hidden sm:inline text-gray-500 font-semibold">Hai, <strong className="text-gray-800">{profile?.name || 'Administrator'}</strong></span>
             <div className="w-8 h-8 rounded-full bg-emerald-500 text-white font-black flex items-center justify-center uppercase text-xs border border-white shadow-sm animate-[pulse_3s_infinite]">
               {profile?.name?.charAt(0) || 'A'}
             </div>
@@ -565,17 +596,21 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
             {/* Row 2: The 4 Grid Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               
-              {/* Card 1: Aplikasi Terdaftar */}
+              {/* Card 1: Catatan Pengembangan */}
               <div 
-                onClick={() => handleActionClick('applications')}
+                onClick={() => handleActionClick('dev_notes')}
                 className="bg-[#E8F2FF] border border-[#BFDBFE] p-5 rounded-[20px] shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex flex-col items-center justify-center aspect-[1/1.05] sm:aspect-auto sm:h-36"
               >
                 <div className="flex items-center justify-center space-x-2">
-                  <span className="text-3xl font-black text-[#1E40AF]">{loading ? '...' : apps.length}</span>
-                  <Smartphone className="w-5 h-5 text-[#1E40AF] flex-shrink-0" />
+                  {loading ? (
+                    <span className="text-3xl font-black text-[#1E40AF]">...</span>
+                  ) : notesCount > 0 ? (
+                    <span className="text-3xl font-black text-red-600">{notesCount}</span>
+                  ) : null}
+                  <Notebook className={`w-5 h-5 ${notesCount > 0 ? 'text-red-600' : 'text-[#1E40AF]'} flex-shrink-0`} />
                 </div>
                 <span className="block text-[10px] md:text-xs font-black text-[#1E40AF]/80 uppercase tracking-wider mt-3 text-center">
-                  Aplikasi Terdaftar
+                  Catatan Pengembangan
                 </span>
               </div>
 
@@ -603,7 +638,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                   <UploadCloud className="w-5 h-5 text-[#B45309] flex-shrink-0" />
                 </div>
                 <span className="block text-[10px] md:text-xs font-black text-[#B45309]/80 uppercase tracking-wider mt-3 text-center">
-                  Update Control
+                  Kontrol Pembaruan
                 </span>
               </div>
 
@@ -617,7 +652,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                   <MessageSquare className="w-5 h-5 text-[#BE123C] flex-shrink-0" />
                 </div>
                 <span className="block text-[10px] md:text-xs font-black text-[#BE123C]/80 uppercase tracking-wider mt-3 text-center">
-                  User Feedback
+                  Umpan Balik Pengguna
                 </span>
               </div>
 
@@ -746,7 +781,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div>
-                <h2 className="text-gray-800 font-black text-sm tracking-tight uppercase">Active Module</h2>
+                <h2 className="text-gray-800 font-black text-sm tracking-tight uppercase">Modul Aktif</h2>
                 <span className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">{activeView}</span>
               </div>
             </div>
@@ -773,6 +808,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
                 />
               )}
               {activeView === 'mayar' && <MayarIntegrationScreen />}
+              {activeView === 'dev_notes' && <DevNotesScreen />}
             </div>
           </div>
         )}

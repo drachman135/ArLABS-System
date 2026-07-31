@@ -1,1 +1,1 @@
-ALTER TABLE public.announcements ADD COLUMN subtitle text;
+ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS subtitle text;

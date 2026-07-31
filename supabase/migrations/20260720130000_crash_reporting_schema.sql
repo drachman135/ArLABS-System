@@ -64,6 +64,9 @@ ALTER TABLE public.crash_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crash_comments ENABLE ROW LEVEL SECURITY;
 
 -- Create policies (Allow service role full access and authenticated/anon reading/inserting for edge sync)
+DROP POLICY IF EXISTS "Allow read/write crash_issues for all" ON public.crash_issues;
 CREATE POLICY "Allow read/write crash_issues for all" ON public.crash_issues FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow read/write crash_reports for all" ON public.crash_reports;
 CREATE POLICY "Allow read/write crash_reports for all" ON public.crash_reports FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow read/write crash_comments for all" ON public.crash_comments;
 CREATE POLICY "Allow read/write crash_comments for all" ON public.crash_comments FOR ALL USING (true) WITH CHECK (true);

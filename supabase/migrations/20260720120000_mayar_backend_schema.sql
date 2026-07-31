@@ -32,17 +32,20 @@ ON CONFLICT (id) DO NOTHING;
 ALTER TABLE public.mayar_integrations_config ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Allow authenticated users and service role to read and modify configuration
+DROP POLICY IF EXISTS "Allow authenticated read on mayar_integrations_config" ON public.mayar_integrations_config;
 CREATE POLICY "Allow authenticated read on mayar_integrations_config"
     ON public.mayar_integrations_config FOR SELECT
     TO authenticated, service_role
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated update on mayar_integrations_config" ON public.mayar_integrations_config;
 CREATE POLICY "Allow authenticated update on mayar_integrations_config"
     ON public.mayar_integrations_config FOR UPDATE
     TO authenticated, service_role
     USING (true)
     WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow authenticated insert on mayar_integrations_config" ON public.mayar_integrations_config;
 CREATE POLICY "Allow authenticated insert on mayar_integrations_config"
     ON public.mayar_integrations_config FOR INSERT
     TO authenticated, service_role
@@ -65,6 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_mayar_webhook_events_created_at ON public.mayar_w
 
 ALTER TABLE public.mayar_webhook_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow authenticated and service_role full access on mayar_webhook_events" ON public.mayar_webhook_events;
 CREATE POLICY "Allow authenticated and service_role full access on mayar_webhook_events"
     ON public.mayar_webhook_events FOR ALL
     TO authenticated, service_role
@@ -93,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_mayar_transactions_created_at ON public.mayar_tra
 
 ALTER TABLE public.mayar_transactions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow authenticated and service_role full access on mayar_transactions" ON public.mayar_transactions;
 CREATE POLICY "Allow authenticated and service_role full access on mayar_transactions"
     ON public.mayar_transactions FOR ALL
     TO authenticated, service_role
