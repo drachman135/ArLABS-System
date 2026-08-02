@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../core/supabase';
+import { getCache, setCache, enqueueSync, getSyncQueueCount } from '../../core/offlineStorage';
+import { useNetworkStatus } from '../../core/networkStatus';
+import { SYNC_COMPLETE_EVENT } from '../../core/devNotesSyncEngine';
 import { 
   Plus, 
   Search, 
@@ -18,7 +21,9 @@ import {
   Copy,
   LayoutGrid,
   List,
-  Send
+  Send,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react';
 
 interface Application {
@@ -87,6 +92,10 @@ export const DevNotesScreen: React.FC = () => {
   const [swipeY, setSwipeY] = useState(0);
   const [startY, setStartY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Offline & Sync state
+  const { isOffline } = useNetworkStatus();
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   
   // Form state
   const [formData, setFormData] = useState<{
@@ -116,7 +125,21 @@ export const DevNotesScreen: React.FC = () => {
     } else {
       setNotes([]);
     }
-  }, [selectedAppId]);
+  }, [selectedAppId, isOffline]);
+
+  // Update pending sync count
+  useEffect(() => {
+    const updateCount = async () => {
+      const count = await getSyncQueueCount();
+      setPendingSyncCount(count);
+    };
+    updateCount();
+
+    // Refresh count setiap kali sync selesai
+    const handleSyncComplete = () => updateCount();
+    window.addEventListener(SYNC_COMPLETE_EVENT, handleSyncComplete);
+    return () => window.removeEventListener(SYNC_COMPLETE_EVENT, handleSyncComplete);
+  }, [notes]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -149,6 +172,21 @@ export const DevNotesScreen: React.FC = () => {
 
   const fetchApps = async () => {
     try {
+      if (isOffline) {
+        // Baca dari cache saat offline
+        const cachedApps = await getCache<Application[]>('dev_notes_apps');
+        if (cachedApps && cachedApps.length > 0) {
+          setApps(cachedApps);
+          const cachedStatuses = await getCache<Record<string, 'RED' | 'GREEN'>>('dev_notes_app_statuses');
+          if (cachedStatuses) setAppStatuses(cachedStatuses);
+
+          const savedAppId = localStorage.getItem('lastSelectedAppId_devNotes');
+          const isValidApp = cachedApps.find(app => app.id === savedAppId);
+          setSelectedAppId(isValidApp ? savedAppId : cachedApps[0].id);
+        }
+        return;
+      }
+
       const { data, error } = await supabase
         .from('applications')
         .select('id, app_name, package_name')
@@ -156,6 +194,7 @@ export const DevNotesScreen: React.FC = () => {
 
       if (error) throw error;
       setApps(data || []);
+      await setCache('dev_notes_apps', data || []);
       
       const { data: allNotes, error: notesError } = await supabase
         .from('dev_notes')
@@ -178,16 +217,14 @@ export const DevNotesScreen: React.FC = () => {
           
           for (const note of appNoteList) {
             const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
-            const hasUnchecked = lines.length === 0 || lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
-            if (hasUnchecked) {
-              hasRed = true;
-              break;
-            }
+            const hasUnchecked = lines.length === 0 || lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/))
+            if (hasUnchecked) { hasRed = true; break; }
           }
           statuses[appId] = hasRed ? 'RED' : 'GREEN';
         });
         
         setAppStatuses(statuses);
+        await setCache('dev_notes_app_statuses', statuses);
       }
 
       if (data && data.length > 0) {
@@ -201,12 +238,22 @@ export const DevNotesScreen: React.FC = () => {
       }
     } catch (err) {
       console.error('Error fetching apps:', err);
+      // Fallback ke cache
+      const cachedApps = await getCache<Application[]>('dev_notes_apps');
+      if (cachedApps) setApps(cachedApps);
     }
   };
 
   const fetchNotes = async (appId: string) => {
     setLoading(true);
     try {
+      if (isOffline) {
+        // Baca dari cache saat offline
+        const cachedNotes = await getCache<DevNote[]>(`dev_notes_${appId}`);
+        setNotes(cachedNotes || []);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('dev_notes')
         .select('*')
@@ -215,8 +262,13 @@ export const DevNotesScreen: React.FC = () => {
 
       if (error) throw error;
       setNotes(data || []);
+      // Cache hasil fetch untuk digunakan saat offline
+      await setCache(`dev_notes_${appId}`, data || []);
     } catch (err) {
       console.error('Error fetching dev notes:', err);
+      // Fallback ke cache saat error
+      const cachedNotes = await getCache<DevNote[]>(`dev_notes_${appId}`);
+      if (cachedNotes) setNotes(cachedNotes);
     } finally {
       setLoading(false);
     }
@@ -258,42 +310,94 @@ export const DevNotesScreen: React.FC = () => {
     setLoading(true);
     try {
       if (editingNote) {
-        const { error } = await supabase
-          .from('dev_notes')
-          .update({
-            title: formData.title,
-            description: formData.description,
-            target_version: formData.target_version || null,
-            priority: formData.priority,
-            type: formData.type,
-            labels: formData.labels,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', editingNote.id);
-          
-        if (error) throw error;
+        const updatePayload = {
+          title: formData.title,
+          description: formData.description,
+          target_version: formData.target_version || null,
+          priority: formData.priority,
+          type: formData.type,
+          labels: formData.labels,
+          updated_at: new Date().toISOString()
+        };
+
+        // Optimistic update di UI
+        const updatedNote: DevNote = { ...editingNote, ...updatePayload } as DevNote;
+        const updatedNotes = notes.map(n => n.id === editingNote.id ? updatedNote : n);
+        setNotes(updatedNotes);
+        await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
+
+        if (isOffline) {
+          // Simpan ke antrian sinkronisasi
+          await enqueueSync({
+            tableName: 'dev_notes',
+            operation: 'UPDATE',
+            payload: updatePayload,
+            remoteId: editingNote.id,
+          });
+          setPendingSyncCount(prev => prev + 1);
+          console.log('[DevNotes] Queued UPDATE for offline sync:', editingNote.id);
+        } else {
+          const { error } = await supabase
+            .from('dev_notes')
+            .update(updatePayload)
+            .eq('id', editingNote.id);
+          if (error) throw error;
+        }
       } else {
-        const { error } = await supabase
-          .from('dev_notes')
-          .insert([{
-            app_id: selectedAppId,
-            title: formData.title,
-            description: formData.description,
-            target_version: formData.target_version || null,
-            status: 'OPEN',
-            priority: formData.priority,
-            type: formData.type,
-            labels: formData.labels
-          }]);
-          
-        if (error) throw error;
+        const localId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const now = new Date().toISOString();
+        const insertPayload = {
+          app_id: selectedAppId,
+          title: formData.title,
+          description: formData.description,
+          target_version: formData.target_version || null,
+          status: 'OPEN' as const,
+          priority: formData.priority,
+          type: formData.type,
+          labels: formData.labels,
+          is_pinned: false,
+          created_at: now,
+          updated_at: now,
+        };
+
+        if (isOffline) {
+          // Buat note lokal sementara (dengan ID lokal)
+          const localNote: DevNote = {
+            ...insertPayload,
+            id: localId,
+            app_id: selectedAppId ?? undefined,
+            priority: insertPayload.priority as DevNote['priority'],
+            status: insertPayload.status as DevNote['status'],
+            type: insertPayload.type as DevNote['type'],
+          };
+          const updatedNotes = [localNote, ...notes];
+          setNotes(updatedNotes);
+          await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
+
+          // Simpan ke antrian sinkronisasi
+          await enqueueSync({
+            tableName: 'dev_notes',
+            operation: 'INSERT',
+            payload: { ...insertPayload, _localId: localId },
+            localId,
+          });
+          setPendingSyncCount(prev => prev + 1);
+          console.log('[DevNotes] Queued INSERT for offline sync, localId:', localId);
+        } else {
+          const { error } = await supabase
+            .from('dev_notes')
+            .insert([insertPayload]);
+          if (error) throw error;
+          if (selectedAppId) fetchNotes(selectedAppId);
+        }
       }
       
       handleCloseModal();
-      if (selectedAppId) fetchNotes(selectedAppId);
     } catch (err) {
       console.error('Error saving dev note:', err);
       alert('Gagal menyimpan catatan');
+      // Revert optimistic update
+      if (selectedAppId) fetchNotes(selectedAppId);
     } finally {
       setLoading(false);
     }
@@ -302,17 +406,37 @@ export const DevNotesScreen: React.FC = () => {
   const handleDeleteNote = async (id: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('dev_notes')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
+      // Optimistic: hapus dari state & cache dulu
+      const updatedNotes = notes.filter(n => n.id !== id);
+      setNotes(updatedNotes);
+      if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
       setDeleteConfirm(null);
-      if (selectedAppId) fetchNotes(selectedAppId);
+
+      if (isOffline) {
+        // Jika ID lokal (belum pernah tersimpan di server), cukup hapus dari antrian INSERT
+        if (id.startsWith('local_')) {
+          console.log('[DevNotes] Removed local-only note, no sync needed:', id);
+        } else {
+          await enqueueSync({
+            tableName: 'dev_notes',
+            operation: 'DELETE',
+            payload: {},
+            remoteId: id,
+          });
+          setPendingSyncCount(prev => prev + 1);
+          console.log('[DevNotes] Queued DELETE for offline sync:', id);
+        }
+      } else {
+        const { error } = await supabase
+          .from('dev_notes')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+      }
     } catch (err) {
       console.error('Error deleting note:', err);
       alert('Gagal menghapus catatan');
+      if (selectedAppId) fetchNotes(selectedAppId);
     } finally {
       setLoading(false);
     }
@@ -322,18 +446,30 @@ export const DevNotesScreen: React.FC = () => {
     e.stopPropagation();
     
     const updatedNote = { ...note, is_pinned: !note.is_pinned };
-    setNotes(notes.map(n => n.id === note.id ? updatedNote : n));
+    const updatedNotes = notes.map(n => n.id === note.id ? updatedNote : n);
+    setNotes(updatedNotes);
+    if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
     
-    try {
-      const { error } = await supabase
-        .from('dev_notes')
-        .update({ is_pinned: !note.is_pinned, updated_at: new Date().toISOString() })
-        .eq('id', note.id);
-        
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error toggling pin:', err);
-      if (selectedAppId) fetchNotes(selectedAppId);
+    if (isOffline) {
+      await enqueueSync({
+        tableName: 'dev_notes',
+        operation: 'UPDATE',
+        payload: { is_pinned: !note.is_pinned, updated_at: new Date().toISOString() },
+        remoteId: note.id,
+      });
+      setPendingSyncCount(prev => prev + 1);
+    } else {
+      try {
+        const { error } = await supabase
+          .from('dev_notes')
+          .update({ is_pinned: !note.is_pinned, updated_at: new Date().toISOString() })
+          .eq('id', note.id);
+          
+        if (error) throw error;
+      } catch (err) {
+        console.error('Error toggling pin:', err);
+        if (selectedAppId) fetchNotes(selectedAppId);
+      }
     }
   };
 
@@ -345,16 +481,12 @@ export const DevNotesScreen: React.FC = () => {
     const hasUncheckedMark = lineToUpdate.trim().startsWith('[ ]');
 
     if (hasCheckedMark) {
-      // Uncheck it
       lineToUpdate = lineToUpdate.replace(/^(\s*)(\[[xXvV]\]|\([xXvV]\))\s*/, '$1[ ] ');
     } else if (hasUncheckedMark) {
-      // Check it
       lineToUpdate = lineToUpdate.replace(/^(\s*)\[ \]\s*/, '$1[x] ');
     } else if (lineToUpdate.trim().startsWith('-')) {
-      // Replace dash with checked mark
       lineToUpdate = lineToUpdate.replace(/^(\s*)-\s*/, '$1[x] ');
     } else {
-      // Prepend checked mark
       lineToUpdate = '[x] ' + lineToUpdate;
     }
 
@@ -364,19 +496,31 @@ export const DevNotesScreen: React.FC = () => {
     // Optimistic update
     const updatedNote = { ...note, description: newDescription };
     setViewingNote(updatedNote);
-    setNotes(notes.map(n => n.id === note.id ? updatedNote : n));
+    const updatedNotes = notes.map(n => n.id === note.id ? updatedNote : n);
+    setNotes(updatedNotes);
+    if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
 
-    try {
-      const { error } = await supabase
-        .from('dev_notes')
-        .update({ description: newDescription, updated_at: new Date().toISOString() })
-        .eq('id', note.id);
-        
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error toggling checklist:', err);
-      setViewingNote(note); // Revert UI
-      if (selectedAppId) fetchNotes(selectedAppId);
+    if (isOffline) {
+      await enqueueSync({
+        tableName: 'dev_notes',
+        operation: 'UPDATE',
+        payload: { description: newDescription, updated_at: new Date().toISOString() },
+        remoteId: note.id,
+      });
+      setPendingSyncCount(prev => prev + 1);
+    } else {
+      try {
+        const { error } = await supabase
+          .from('dev_notes')
+          .update({ description: newDescription, updated_at: new Date().toISOString() })
+          .eq('id', note.id);
+          
+        if (error) throw error;
+      } catch (err) {
+        console.error('Error toggling checklist:', err);
+        setViewingNote(note);
+        if (selectedAppId) fetchNotes(selectedAppId);
+      }
     }
   };
 
@@ -389,19 +533,31 @@ export const DevNotesScreen: React.FC = () => {
       
     const updatedNote = { ...viewingNote, description: newDescription };
     setViewingNote(updatedNote);
-    setNotes(notes.map(n => n.id === viewingNote.id ? updatedNote : n));
+    const updatedNotes = notes.map(n => n.id === viewingNote.id ? updatedNote : n);
+    setNotes(updatedNotes);
+    if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
     setNewItemText('');
 
-    try {
-      const { error } = await supabase
-        .from('dev_notes')
-        .update({ description: newDescription, updated_at: new Date().toISOString() })
-        .eq('id', viewingNote.id);
-        
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error adding item:', err);
-      if (selectedAppId) fetchNotes(selectedAppId);
+    if (isOffline) {
+      await enqueueSync({
+        tableName: 'dev_notes',
+        operation: 'UPDATE',
+        payload: { description: newDescription, updated_at: new Date().toISOString() },
+        remoteId: viewingNote.id,
+      });
+      setPendingSyncCount(prev => prev + 1);
+    } else {
+      try {
+        const { error } = await supabase
+          .from('dev_notes')
+          .update({ description: newDescription, updated_at: new Date().toISOString() })
+          .eq('id', viewingNote.id);
+          
+        if (error) throw error;
+      } catch (err) {
+        console.error('Error adding item:', err);
+        if (selectedAppId) fetchNotes(selectedAppId);
+      }
     }
   };
 
@@ -414,19 +570,31 @@ export const DevNotesScreen: React.FC = () => {
       
     const updatedNote = { ...viewingNote, description: newDescription };
     setViewingNote(updatedNote);
-    setNotes(notes.map(n => n.id === viewingNote.id ? updatedNote : n));
+    const updatedNotes = notes.map(n => n.id === viewingNote.id ? updatedNote : n);
+    setNotes(updatedNotes);
+    if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
     setDeleteConfirm(null);
 
-    try {
-      const { error } = await supabase
-        .from('dev_notes')
-        .update({ description: newDescription, updated_at: new Date().toISOString() })
-        .eq('id', viewingNote.id);
-        
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error deleting item:', err);
-      if (selectedAppId) fetchNotes(selectedAppId);
+    if (isOffline) {
+      await enqueueSync({
+        tableName: 'dev_notes',
+        operation: 'UPDATE',
+        payload: { description: newDescription, updated_at: new Date().toISOString() },
+        remoteId: viewingNote.id,
+      });
+      setPendingSyncCount(prev => prev + 1);
+    } else {
+      try {
+        const { error } = await supabase
+          .from('dev_notes')
+          .update({ description: newDescription, updated_at: new Date().toISOString() })
+          .eq('id', viewingNote.id);
+          
+        if (error) throw error;
+      } catch (err) {
+        console.error('Error deleting item:', err);
+        if (selectedAppId) fetchNotes(selectedAppId);
+      }
     }
   };
 
@@ -488,17 +656,29 @@ export const DevNotesScreen: React.FC = () => {
       
       const updatedNote = { ...viewingNote, description: newDescription };
       setViewingNote(updatedNote);
-      setNotes(notes.map(n => n.id === viewingNote.id ? updatedNote : n));
+      const updatedNotes = notes.map(n => n.id === viewingNote.id ? updatedNote : n);
+      setNotes(updatedNotes);
+      if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
       
-      try {
-        const { error } = await supabase
-          .from('dev_notes')
-          .update({ description: newDescription, updated_at: new Date().toISOString() })
-          .eq('id', viewingNote.id);
-        if (error) throw error;
-      } catch (err) {
-        console.error('Error reordering items:', err);
-        if (selectedAppId) fetchNotes(selectedAppId);
+      if (isOffline) {
+        await enqueueSync({
+          tableName: 'dev_notes',
+          operation: 'UPDATE',
+          payload: { description: newDescription, updated_at: new Date().toISOString() },
+          remoteId: viewingNote.id,
+        });
+        setPendingSyncCount(prev => prev + 1);
+      } else {
+        try {
+          const { error } = await supabase
+            .from('dev_notes')
+            .update({ description: newDescription, updated_at: new Date().toISOString() })
+            .eq('id', viewingNote.id);
+          if (error) throw error;
+        } catch (err) {
+          console.error('Error reordering items:', err);
+          if (selectedAppId) fetchNotes(selectedAppId);
+        }
       }
     }
     setDraggedItemIndex(null);
@@ -579,8 +759,31 @@ export const DevNotesScreen: React.FC = () => {
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-black text-gray-800 tracking-tight">Catatan Pengembangan</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-xl font-black text-gray-800 tracking-tight">Catatan Pengembangan</h2>
+            {/* Offline indicator */}
+            {isOffline && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full">
+                <WifiOff className="w-3 h-3 text-amber-500" />
+                <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Offline</span>
+              </div>
+            )}
+            {/* Pending sync badge */}
+            {pendingSyncCount > 0 && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-full animate-pulse">
+                <RefreshCw className="w-3 h-3 text-blue-500" />
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider">
+                  {pendingSyncCount} menunggu sync
+                </span>
+              </div>
+            )}
+          </div>
           <p className="text-sm text-gray-500 font-medium">Kelola tugas, perbaikan bug, dan rencana fitur aplikasi.</p>
+          {isOffline && pendingSyncCount > 0 && (
+            <p className="text-xs text-amber-600 font-semibold mt-1">
+              ⏳ {pendingSyncCount} perubahan akan disinkronkan saat koneksi tersedia.
+            </p>
+          )}
         </div>
         <button
           onClick={() => handleOpenModal()}
@@ -588,7 +791,7 @@ export const DevNotesScreen: React.FC = () => {
           className="hidden sm:flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-xl font-bold transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
-          <span>Tambah Catatan</span>
+          <span>Tambah Catatan{isOffline ? ' (Offline)' : ''}</span>
         </button>
       </div>
 

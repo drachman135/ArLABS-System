@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { supabase } from './core/supabase';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { DashboardScreen } from './features/dashboard/DashboardScreen';
+import { useNetworkStatus, initNetworkListener, NETWORK_CHANGE_EVENT } from './core/networkStatus';
+import { processSyncQueue, SYNC_COMPLETE_EVENT, SYNC_START_EVENT } from './core/devNotesSyncEngine';
+import { getSyncQueueCount } from './core/offlineStorage';
 import './index.css';
 
 const App: React.FC = () => {
@@ -10,11 +13,54 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<{ name: string; role: string; email: string } | null>(null);
 
-  // Initialize and check current auth session
+  // Network & Sync state
+  const { isOffline } = useNetworkStatus();
+  const [syncToast, setSyncToast] = useState<{ type: 'syncing' | 'done' | 'none'; count?: number } | null>(null);
+  const syncToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Initialize network listener + OneSignal
   useEffect(() => {
+    // Init Capacitor Network listener
+    initNetworkListener();
+
+    // Listen for sync events to show toast
+    const handleSyncStart = () => {
+      if (syncToastTimerRef.current) clearTimeout(syncToastTimerRef.current);
+      setSyncToast({ type: 'syncing' });
+    };
+
+    const handleSyncComplete = (e: Event) => {
+      const { successCount } = (e as CustomEvent<{ successCount: number; errorCount: number }>).detail;
+      if (successCount > 0) {
+        setSyncToast({ type: 'done', count: successCount });
+        syncToastTimerRef.current = setTimeout(() => setSyncToast(null), 4000);
+      } else {
+        setSyncToast(null);
+      }
+    };
+
+    window.addEventListener(SYNC_COMPLETE_EVENT, handleSyncComplete);
+    window.addEventListener(SYNC_START_EVENT, handleSyncStart);
+
+    // Saat kembali online, proses antrian sinkronisasi
+    const handleNetworkChange = async (e: Event) => {
+      const { status } = (e as CustomEvent<{ status: string }>).detail;
+      if (status === 'online') {
+        const queueCount = await getSyncQueueCount();
+        if (queueCount > 0) {
+          console.log(`[App] Back online, processing ${queueCount} queued sync item(s)...`);
+          await processSyncQueue();
+          // Trigger refresh data di seluruh app
+          window.dispatchEvent(new Event('db-refresh'));
+        }
+      }
+    };
+
+    window.addEventListener(NETWORK_CHANGE_EVENT, handleNetworkChange);
+
+    // OneSignal init
     let attempts = 0;
     const maxAttempts = 20;
-
     const tryInitOneSignal = () => {
       const win = window as any;
       if (win.plugins?.OneSignal) {
@@ -24,7 +70,6 @@ const App: React.FC = () => {
           OneSignal.Notifications.requestPermission(true).then((success: boolean) => {
             console.log("OneSignal push notification permission response:", success);
           });
-          console.log("OneSignal SDK initialized successfully from App Root");
           return true;
         } catch (err) {
           console.error("Failed to initialize OneSignal SDK:", err);
@@ -33,15 +78,18 @@ const App: React.FC = () => {
       }
       return false;
     };
-
     const intervalId = setInterval(() => {
       attempts++;
-      if (tryInitOneSignal() || attempts >= maxAttempts) {
-        clearInterval(intervalId);
-      }
+      if (tryInitOneSignal() || attempts >= maxAttempts) clearInterval(intervalId);
     }, 500);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener(SYNC_COMPLETE_EVENT, handleSyncComplete);
+      window.removeEventListener(SYNC_START_EVENT, handleSyncStart);
+      window.removeEventListener(NETWORK_CHANGE_EVENT, handleNetworkChange);
+      if (syncToastTimerRef.current) clearTimeout(syncToastTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -143,11 +191,58 @@ const App: React.FC = () => {
 
   // Render DashboardScreen if authenticated
   return (
-    <DashboardScreen 
-      session={session} 
-      profile={profile} 
-      onLogout={handleLogout} 
-    />
+    <div className="relative">
+      {/* ── OFFLINE BANNER ── */}
+      {isOffline && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-2.5 px-4 py-2.5"
+          style={{
+            background: 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+            boxShadow: '0 2px 12px rgba(245,158,11,0.45)',
+            animation: 'slideDownBanner 0.3s ease-out',
+          }}
+        >
+          <span style={{ fontSize: '14px' }}>📡</span>
+          <span className="text-white font-black text-xs uppercase tracking-widest">
+            Mode Offline — Data lokal ditampilkan. Perubahan Dev Notes akan tersinkron saat online.
+          </span>
+        </div>
+      )}
+
+      {/* ── SYNC TOAST ── */}
+      {syncToast && syncToast.type !== 'none' && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl shadow-2xl"
+          style={{
+            background: syncToast.type === 'done'
+              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+              : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+            animation: 'fadeInUp 0.3s ease-out',
+          }}
+        >
+          {syncToast.type === 'syncing' ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              <span className="text-white font-bold text-xs">Menyinkronkan data offline...</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '14px' }}>✅</span>
+              <span className="text-white font-bold text-xs">
+                {syncToast.count} catatan berhasil disinkronkan ke server!
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      <DashboardScreen 
+        session={session} 
+        profile={profile} 
+        onLogout={handleLogout}
+        isOffline={isOffline}
+      />
+    </div>
   );
 };
 

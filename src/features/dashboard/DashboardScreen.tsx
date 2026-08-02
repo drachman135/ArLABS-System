@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../core/supabase';
+import { getCache, setCache } from '../../core/offlineStorage';
 import { LicenseScreen } from '../licenses/LicenseScreen';
 import { CustomerScreen } from '../customers/CustomerScreen';
 import { AppManagementScreen } from '../applications/AppManagementScreen';
@@ -50,9 +51,10 @@ interface DashboardScreenProps {
   session: any;
   profile: { name: string; role: string; email: string } | null;
   onLogout: () => void;
+  isOffline?: boolean;
 }
 
-export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout }) => {
+export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profile, onLogout, isOffline = false }) => {
   const [activeView, setActiveView] = useState<'dashboard' | 'analytics' | 'apkstats' | 'crash' | 'licenses' | 'customers' | 'applications' | 'updates' | 'notifications' | 'announcements' | 'config' | 'feedback' | 'cloudflare_files' | 'products' | 'mayar' | 'help_center' | 'dev_notes'>('dashboard');
   const [connected, setConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
@@ -235,6 +237,30 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+      if (isOffline) {
+        // ── OFFLINE: Baca dari cache IndexedDB ──
+        const cachedMetrics = await getCache<typeof metrics>('dashboard_metrics');
+        const cachedApps = await getCache<any[]>('dashboard_apps');
+        const cachedLicenses = await getCache<any[]>('dashboard_licenses');
+        const cachedDevices = await getCache<any[]>('dashboard_devices');
+        const cachedUpdatesCount = await getCache<number>('dashboard_updates_count');
+        const cachedFeedbackCount = await getCache<number>('dashboard_feedback_count');
+        const cachedNotesCount = await getCache<number>('dashboard_notes_count');
+        const cachedLogs = await getCache<any[]>('dashboard_logs');
+
+        if (cachedMetrics) setMetrics(cachedMetrics);
+        if (cachedApps) setApps(cachedApps);
+        if (cachedLicenses) setLicensesList(cachedLicenses);
+        if (cachedDevices) setDevicesList(cachedDevices);
+        if (cachedUpdatesCount !== null) setUpdatesCount(cachedUpdatesCount ?? 0);
+        if (cachedFeedbackCount !== null) setFeedbackCount(cachedFeedbackCount ?? 0);
+        if (cachedNotesCount !== null) setNotesCount(cachedNotesCount ?? 0);
+        if (cachedLogs) setActivityLogs(cachedLogs);
+        setConnected(false);
+        return;
+      }
+
+      // ── ONLINE: Fetch dari Supabase, lalu cache ──
       const { error: pingError } = await supabase.from('admins').select('id').limit(1);
       if (pingError) throw pingError;
       setConnected(true);
@@ -243,11 +269,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       const { count: activeDevCount } = await supabase.from('devices').select('*', { count: 'exact', head: true });
       const { count: expiredLicCount } = await supabase.from('licenses').select('*', { count: 'exact', head: true }).in('status', ['EXPIRED', 'SUSPENDED']);
 
-      setMetrics({
+      const newMetrics = {
         activeDevices: activeDevCount || 0,
         activeLicenses: activeLicCount || 0,
         expiredLicenses: expiredLicCount || 0
-      });
+      };
+      setMetrics(newMetrics);
+      await setCache('dashboard_metrics', newMetrics);
 
       // Fetch Applications
       const { data: appsData } = await supabase
@@ -263,10 +291,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         .select('id, application_id, status, created_at, updated_at, activated_at, last_validation, renewed_at');
       const loadedLicenses = licensesData || [];
       setLicensesList(loadedLicenses);
+      await setCache('dashboard_licenses', loadedLicenses);
 
       const { data: devicesData } = await supabase.from('devices').select('id, license_id, created_at, last_online');
       const loadedDevices = devicesData || [];
       setDevicesList(loadedDevices);
+      await setCache('dashboard_devices', loadedDevices);
 
       // Dynamically sort apps based on last activity time
       const sortedApps = [...loadedApps].map(app => {
@@ -283,9 +313,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
             l.renewed_at ? new Date(l.renewed_at).getTime() : 0,
           ];
           const maxLicTime = Math.max(...times);
-          if (maxLicTime > lastActiveTime) {
-            lastActiveTime = maxLicTime;
-          }
+          if (maxLicTime > lastActiveTime) lastActiveTime = maxLicTime;
 
           // Check devices connected to this license
           const licenseDevices = loadedDevices.filter(d => d.license_id === l.id);
@@ -295,9 +323,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               d.last_online ? new Date(d.last_online).getTime() : 0
             ];
             const maxDevTime = Math.max(...devTimes);
-            if (maxDevTime > lastActiveTime) {
-              lastActiveTime = maxDevTime;
-            }
+            if (maxDevTime > lastActiveTime) lastActiveTime = maxDevTime;
           });
         });
 
@@ -305,13 +331,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
       }).sort((a, b) => b.lastActiveTime - a.lastActiveTime);
 
       setApps(sortedApps);
+      await setCache('dashboard_apps', sortedApps);
 
-      // Fetch additional dashboard summary info matching Rumahweb redesign
+      // Fetch additional dashboard summary info
       try {
         const { count: upCount } = await supabase
           .from('application_versions')
           .select('*', { count: 'exact', head: true });
         setUpdatesCount(upCount || 0);
+        await setCache('dashboard_updates_count', upCount || 0);
       } catch (e) {
         console.warn("Failed fetching versions count: ", e);
       }
@@ -321,6 +349,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           .from('feedback_reports')
           .select('*', { count: 'exact', head: true });
         setFeedbackCount(feedCount || 0);
+        await setCache('dashboard_feedback_count', feedCount || 0);
       } catch (e) {
         console.warn("Failed fetching feedback count: ", e);
       }
@@ -335,7 +364,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           for (const note of allNotes) {
             const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
             if (lines.length === 0) {
-              // Jika catatan kosong namun belum ditandai selesai/hijau, anggap sebagai 1 tugas yang belum selesai.
               totalUncheckedTasks++;
             } else {
               lines.forEach((l: string) => {
@@ -346,6 +374,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
             }
           }
           setNotesCount(totalUncheckedTasks);
+          await setCache('dashboard_notes_count', totalUncheckedTasks);
         } else {
           setNotesCount(0);
         }
@@ -361,12 +390,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
           .limit(5);
 
         setActivityLogs(logsData || []);
+        await setCache('dashboard_logs', logsData || []);
       } catch (e) {
         console.warn("Failed fetching logs: ", e);
         setActivityLogs([]);
       }
     } catch (err: any) {
       setConnected(false);
+      // Fallback ke cache saat terjadi error koneksi
+      const cachedMetrics = await getCache<typeof metrics>('dashboard_metrics');
+      if (cachedMetrics) setMetrics(cachedMetrics);
+      const cachedApps = await getCache<any[]>('dashboard_apps');
+      if (cachedApps) setApps(cachedApps);
     } finally {
       setLoading(false);
     }

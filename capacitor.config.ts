@@ -6,6 +6,10 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https'
+  },
+  plugins: {
+    // Capacitor Network plugin — digunakan untuk deteksi online/offline di Android
+    Network: {},
   }
 };
 
