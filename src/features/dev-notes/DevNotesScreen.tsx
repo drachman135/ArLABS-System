@@ -609,21 +609,7 @@ export const DevNotesScreen: React.FC = () => {
     }).map(line => line.replace(/^(\[[xXvV ]\]|\([xXvV ]\)|-)\s*/i, '').trim());
     
     if (uncheckedTasks.length > 0) {
-      const action = viewingNote.type === 'BUG' ? 'melakukan perbaikan bug' : 
-                     viewingNote.type === 'FEATURE' ? 'melakukan implementasi fitur' : 
-                     viewingNote.type === 'IMPROVEMENT' ? 'melakukan peningkatan sistem' : 
-                     'mengerjakan tugas';
-                     
-      const targetApp = apps.find(a => a.id === viewingNote.app_id);
-      
-      let flavorText = '';
-      if (targetApp && targetApp.app_name) {
-        const parts = targetApp.app_name.trim().split(' ');
-        const lastName = parts[parts.length - 1];
-        flavorText = ` pada flavor ${lastName.toLowerCase()} saja tanpa melakukan perubahan pada flavor lainnya`;
-      }
-      
-      const textToCopy = `Tolong bantu saya ${action}${flavorText} berdasarkan daftar berikut:\n\n${uncheckedTasks.map(t => `- ${t}`).join('\n')}`;
+      const textToCopy = uncheckedTasks.map(t => `- ${t}`).join('\n');
       try {
         await navigator.clipboard.writeText(textToCopy);
         setIsCopied(true);
