@@ -99,6 +99,12 @@ export const DevNotesScreen: React.FC = () => {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   
   // Form state
+  const [toastMessage, setToastMessage] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+    setToastMessage({ message, type });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   const [formData, setFormData] = useState<{
     title: string;
     description: string;
@@ -199,7 +205,7 @@ export const DevNotesScreen: React.FC = () => {
       
       const { data: allNotes, error: notesError } = await supabase
         .from('dev_notes')
-        .select('app_id, description');
+        .select('app_id, description, type, labels, status');
         
       if (!notesError && allNotes) {
         const statuses: Record<string, 'RED' | 'GREEN'> = {};
@@ -217,9 +223,19 @@ export const DevNotesScreen: React.FC = () => {
           let hasRed = false;
           
           for (const note of appNoteList) {
-            const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
-            const hasUnchecked = lines.length === 0 || lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/))
-            if (hasUnchecked) { hasRed = true; break; }
+            let nType = note.type;
+            if (nType === 'TASK' && note.labels?.includes('__ROADMAP__')) nType = 'ROADMAP';
+            
+            if (nType === 'ROADMAP') {
+              if (note.status !== 'CLOSED' && note.status !== 'RESOLVED') {
+                hasRed = true;
+                break;
+              }
+            } else {
+              const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
+              const hasUnchecked = lines.length === 0 || lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/))
+              if (hasUnchecked) { hasRed = true; break; }
+            }
           }
           statuses[appId] = hasRed ? 'RED' : 'GREEN';
         });
@@ -262,9 +278,17 @@ export const DevNotesScreen: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setNotes(data || []);
+      
+      const decodedData = (data || []).map((note: any) => {
+        if (note.type === 'TASK' && note.labels?.includes('__ROADMAP__')) {
+          return { ...note, type: 'ROADMAP', labels: note.labels.filter((l: string) => l !== '__ROADMAP__') };
+        }
+        return note;
+      });
+      
+      setNotes(decodedData);
       // Cache hasil fetch untuk digunakan saat offline
-      await setCache(`dev_notes_${appId}`, data || []);
+      await setCache(`dev_notes_${appId}`, decodedData);
     } catch (err) {
       console.error('Error fetching dev notes:', err);
       // Fallback ke cache saat error
@@ -327,12 +351,18 @@ export const DevNotesScreen: React.FC = () => {
         setNotes(updatedNotes);
         await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
 
+        const dbType = updatePayload.type === 'ROADMAP' ? 'TASK' : updatePayload.type;
+        const dbLabels = updatePayload.type === 'ROADMAP' 
+          ? [...(updatePayload.labels || []).filter(l => l !== '__ROADMAP__'), '__ROADMAP__'] 
+          : (updatePayload.labels || []).filter(l => l !== '__ROADMAP__');
+        const dbUpdatePayload = { ...updatePayload, type: dbType, labels: dbLabels };
+
         if (isOffline) {
           // Simpan ke antrian sinkronisasi
           await enqueueSync({
             tableName: 'dev_notes',
             operation: 'UPDATE',
-            payload: updatePayload,
+            payload: dbUpdatePayload,
             remoteId: editingNote.id,
           });
           setPendingSyncCount(prev => prev + 1);
@@ -340,7 +370,7 @@ export const DevNotesScreen: React.FC = () => {
         } else {
           const { error } = await supabase
             .from('dev_notes')
-            .update(updatePayload)
+            .update(dbUpdatePayload)
             .eq('id', editingNote.id);
           if (error) throw error;
         }
@@ -375,28 +405,40 @@ export const DevNotesScreen: React.FC = () => {
           setNotes(updatedNotes);
           await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
 
+          const dbType = insertPayload.type === 'ROADMAP' ? 'TASK' : insertPayload.type;
+          const dbLabels = insertPayload.type === 'ROADMAP' 
+            ? [...(insertPayload.labels || []), '__ROADMAP__'] 
+            : insertPayload.labels;
+          const dbInsertPayload = { ...insertPayload, type: dbType, labels: dbLabels, _localId: localId };
+
           // Simpan ke antrian sinkronisasi
           await enqueueSync({
             tableName: 'dev_notes',
             operation: 'INSERT',
-            payload: { ...insertPayload, _localId: localId },
+            payload: dbInsertPayload,
             localId,
           });
           setPendingSyncCount(prev => prev + 1);
           console.log('[DevNotes] Queued INSERT for offline sync, localId:', localId);
         } else {
+          const dbType = insertPayload.type === 'ROADMAP' ? 'TASK' : insertPayload.type;
+          const dbLabels = insertPayload.type === 'ROADMAP' 
+            ? [...(insertPayload.labels || []), '__ROADMAP__'] 
+            : insertPayload.labels;
+          const dbInsertPayload = { ...insertPayload, type: dbType, labels: dbLabels };
+
           const { error } = await supabase
             .from('dev_notes')
-            .insert([insertPayload]);
+            .insert([dbInsertPayload]);
           if (error) throw error;
           if (selectedAppId) fetchNotes(selectedAppId);
         }
       }
       
       handleCloseModal();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving dev note:', err);
-      alert('Gagal menyimpan catatan');
+      showToast(err?.message || 'Gagal menyimpan catatan', 'error');
       // Revert optimistic update
       if (selectedAppId) fetchNotes(selectedAppId);
     } finally {
@@ -434,9 +476,9 @@ export const DevNotesScreen: React.FC = () => {
           .eq('id', id);
         if (error) throw error;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting note:', err);
-      alert('Gagal menghapus catatan');
+      showToast(err?.message || 'Gagal menghapus catatan', 'error');
       if (selectedAppId) fetchNotes(selectedAppId);
     } finally {
       setLoading(false);
@@ -1570,6 +1612,19 @@ export const DevNotesScreen: React.FC = () => {
         </div>
       )}
 
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3 rounded-full shadow-lg border animate-[fadeInUp_0.3s_ease-out] bg-white border-gray-100">
+          {toastMessage.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 text-red-500" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-green-500" />
+          )}
+          <span className={`text-sm font-bold ${toastMessage.type === 'error' ? 'text-gray-800' : 'text-gray-800'}`}>
+            {toastMessage.message}
+          </span>
+        </div>
+      )}
     </div>
   );
 };
