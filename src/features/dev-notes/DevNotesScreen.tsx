@@ -40,7 +40,7 @@ interface DevNote {
   target_version: string | null;
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  type: 'BUG' | 'FEATURE' | 'IMPROVEMENT' | 'TASK';
+  type: 'BUG' | 'FEATURE' | 'IMPROVEMENT' | 'TASK' | 'ROADMAP';
   is_pinned?: boolean;
   labels?: string[];
   created_at: string;
@@ -60,6 +60,7 @@ export const DevNotesScreen: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Tab, Filter & Sorting states
+  const [viewTab, setViewTab] = useState<'TASKS' | 'ROADMAP'>('TASKS');
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterPriority, setFilterPriority] = useState<string>('ALL');
@@ -315,7 +316,7 @@ export const DevNotesScreen: React.FC = () => {
           description: formData.description,
           target_version: formData.target_version || null,
           priority: formData.priority,
-          type: formData.type,
+          type: viewTab === 'ROADMAP' ? 'ROADMAP' : formData.type,
           labels: formData.labels,
           updated_at: new Date().toISOString()
         };
@@ -353,7 +354,7 @@ export const DevNotesScreen: React.FC = () => {
           target_version: formData.target_version || null,
           status: 'OPEN' as const,
           priority: formData.priority,
-          type: formData.type,
+          type: viewTab === 'ROADMAP' ? 'ROADMAP' : formData.type,
           labels: formData.labels,
           is_pinned: false,
           created_at: now,
@@ -620,6 +621,47 @@ export const DevNotesScreen: React.FC = () => {
     }
   };
 
+  const handleCopyPrompt = async (e: React.MouseEvent, text: string) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      // Optional: bisa tambahkan toast atau indikator visual kecil (sekarang memakai alert/toast bawaan jika ada)
+    } catch (err) {
+      console.error('Failed to copy prompt: ', err);
+    }
+  };
+
+  const handleTogglePhaseStatus = async (e: React.MouseEvent, note: DevNote) => {
+    e.stopPropagation();
+    const newStatus = (note.status === 'CLOSED' || note.status === 'RESOLVED') ? 'OPEN' : 'CLOSED';
+    
+    const updatedNote = { ...note, status: newStatus as DevNote['status'], updated_at: new Date().toISOString() };
+    const updatedNotes = notes.map(n => n.id === note.id ? updatedNote : n);
+    setNotes(updatedNotes);
+    if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
+
+    if (isOffline) {
+      await enqueueSync({
+        tableName: 'dev_notes',
+        operation: 'UPDATE',
+        payload: { status: newStatus, updated_at: new Date().toISOString() },
+        remoteId: note.id,
+      });
+      setPendingSyncCount(prev => prev + 1);
+    } else {
+      try {
+        const { error } = await supabase
+          .from('dev_notes')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', note.id);
+        if (error) throw error;
+      } catch (err) {
+        console.error('Error updating roadmap status:', err);
+        if (selectedAppId) fetchNotes(selectedAppId);
+      }
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedItemIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -679,12 +721,24 @@ export const DevNotesScreen: React.FC = () => {
   };
 
   const processedNotes = notes.filter(note => {
-    // Determine completed status based on checklist
-    const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
-    const hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
-    const isCompleted = !hasUnchecked;
+    // View tab filter
+    if (viewTab === 'ROADMAP') {
+      if (note.type !== 'ROADMAP') return false;
+    } else {
+      if (note.type === 'ROADMAP') return false;
+    }
+
+    // Determine completed status based on checklist (or status for roadmap)
+    let isCompleted = false;
+    if (note.type === 'ROADMAP') {
+      isCompleted = note.status === 'CLOSED' || note.status === 'RESOLVED';
+    } else {
+      const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
+      const hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+      isCompleted = !hasUnchecked;
+    }
     
-    // Tab filter
+    // Tab filter (Aktif vs Selesai)
     if (activeTab === 'ACTIVE' && isCompleted) return false;
     if (activeTab === 'COMPLETED' && !isCompleted) return false;
     
@@ -735,6 +789,7 @@ export const DevNotesScreen: React.FC = () => {
       case 'BUG': return 'text-red-600 bg-red-50';
       case 'FEATURE': return 'text-purple-600 bg-purple-50';
       case 'IMPROVEMENT': return 'text-emerald-600 bg-emerald-50';
+      case 'ROADMAP': return 'text-orange-600 bg-orange-50';
       case 'TASK': return 'text-blue-600 bg-blue-50';
       default: return 'text-gray-600 bg-gray-50';
     }
@@ -781,13 +836,39 @@ export const DevNotesScreen: React.FC = () => {
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* Main Tabs */}
+      <div className="flex bg-gray-100/50 p-1.5 rounded-2xl w-full">
+        <button
+          onClick={() => setViewTab('TASKS')}
+          className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 rounded-xl text-sm font-black transition-all ${
+            viewTab === 'TASKS' 
+              ? 'bg-white text-blue-600 shadow-sm border border-gray-100/50' 
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+          }`}
+        >
+          <List className="w-4 h-4" />
+          <span>Tugas & Bug</span>
+        </button>
+        <button
+          onClick={() => setViewTab('ROADMAP')}
+          className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 rounded-xl text-sm font-black transition-all ${
+            viewTab === 'ROADMAP' 
+              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm' 
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+          }`}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          <span>Roadmap AI</span>
+        </button>
+      </div>
+
+      {/* Sub Tabs: Active vs Completed */}
       <div className="flex space-x-1 bg-gray-100/80 p-1 rounded-xl w-full sm:w-fit">
         <button
           onClick={() => setActiveTab('ACTIVE')}
           className={`flex-1 sm:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'ACTIVE' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          Aktif
+          {viewTab === 'ROADMAP' ? 'Berjalan' : 'Aktif'}
         </button>
         <button
           onClick={() => setActiveTab('COMPLETED')}
@@ -943,7 +1024,12 @@ export const DevNotesScreen: React.FC = () => {
         <div className={viewMode === 'GRID' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "flex flex-col gap-3"}>
           {processedNotes.map((note) => {
             const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
-            const hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+            let hasUnchecked = true;
+            if (note.type === 'ROADMAP') {
+              hasUnchecked = note.status !== 'CLOSED' && note.status !== 'RESOLVED';
+            } else {
+              hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+            }
             
             if (viewMode === 'LIST') {
               const checkedCount = lines.filter(l => l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/)).length;
@@ -961,14 +1047,33 @@ export const DevNotesScreen: React.FC = () => {
                   </div>
                   
                   <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0 pl-5 sm:pl-0">
-                    {lines.length > 0 && (
+                    {note.type === 'ROADMAP' ? (() => {
+                      const isDone = note.status === 'CLOSED' || note.status === 'RESOLVED';
+                      return (
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={(e) => handleCopyPrompt(e, note.description)}
+                            className="flex justify-center items-center px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors text-[10px] font-bold border border-orange-100"
+                          >
+                            <Copy className="w-3 h-3 mr-1" /> Salin
+                          </button>
+                          <button 
+                            onClick={(e) => handleTogglePhaseStatus(e, note)}
+                            className={`flex justify-center items-center px-3 py-1.5 rounded-lg transition-colors text-[10px] font-bold border ${isDone ? 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-gray-200' : 'bg-green-50 text-green-600 hover:bg-green-100 border-green-100'}`}
+                          >
+                            <CheckCircle2 className={`w-3 h-3 ${isDone ? '' : 'text-green-500'} mr-1`} />
+                            {isDone ? 'Batal' : 'Selesai'}
+                          </button>
+                        </div>
+                      );
+                    })() : (lines.length > 0 && (
                       <div className="flex items-center gap-2 w-32">
                         <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                           <div className={`h-1.5 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
                         </div>
                         <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">{progress}%</span>
                       </div>
-                    )}
+                    ))}
                     
                     <div className="flex items-center space-x-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => handleTogglePin(note, e)} className={`p-1.5 rounded-lg transition-colors ${note.is_pinned ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}><Pin className={`w-4 h-4 ${note.is_pinned ? 'fill-blue-600' : ''}`} /></button>
@@ -999,6 +1104,7 @@ export const DevNotesScreen: React.FC = () => {
                     {note.type === 'BUG' ? 'BUG' :
                      note.type === 'FEATURE' ? 'FITUR' :
                      note.type === 'IMPROVEMENT' ? 'PENINGKATAN' :
+                     note.type === 'ROADMAP' ? 'Fase Roadmap' :
                      note.type === 'TASK' ? 'TUGAS' : note.type}
                   </span>
                   {note.labels && note.labels.map(label => (
@@ -1036,6 +1142,31 @@ export const DevNotesScreen: React.FC = () => {
               <h3 className="font-bold text-gray-800 mb-3 line-clamp-2">{note.title}</h3>
               
               {(() => {
+                if (note.type === 'ROADMAP') {
+                  const isDone = note.status === 'CLOSED' || note.status === 'RESOLVED';
+                  return (
+                    <div className="mb-4 mt-2">
+                      <p className="text-xs text-gray-500 mb-3 line-clamp-3 leading-relaxed">{note.description}</p>
+                      <div className="flex gap-2 w-full">
+                        <button 
+                          onClick={(e) => handleCopyPrompt(e, note.description)}
+                          className="flex-1 flex justify-center items-center gap-1.5 py-2 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors text-xs font-bold border border-orange-100"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Salin Prompt AI
+                        </button>
+                        <button 
+                          onClick={(e) => handleTogglePhaseStatus(e, note)}
+                          className={`flex justify-center items-center px-4 py-2 rounded-xl transition-colors text-xs font-bold border ${isDone ? 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-gray-200' : 'bg-green-50 text-green-600 hover:bg-green-100 border-green-100'}`}
+                        >
+                          <CheckCircle2 className={`w-3.5 h-3.5 ${isDone ? '' : 'text-green-500'} mr-1.5`} />
+                          {isDone ? 'Batal' : 'Selesai'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
                 if (lines.length === 0) return null;
                 
@@ -1106,13 +1237,15 @@ export const DevNotesScreen: React.FC = () => {
             
             <div className="p-6 overflow-y-auto space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Judul</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                  {viewTab === 'ROADMAP' ? 'Nama Fase / Roadmap' : 'Judul'}
+                </label>
                 <input 
                   type="text" 
                   value={formData.title}
                   onChange={e => setFormData({...formData, title: e.target.value})}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  placeholder="Contoh: Perbaiki layout tombol login"
+                  placeholder={viewTab === 'ROADMAP' ? "Contoh: Phase 1: Setup Backend" : "Contoh: Perbaiki layout tombol login"}
                 />
               </div>
               
@@ -1132,13 +1265,20 @@ export const DevNotesScreen: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Tipe</label>
                   <select 
-                    value={formData.type}
+                    value={viewTab === 'ROADMAP' ? 'ROADMAP' : formData.type}
                     onChange={e => setFormData({...formData, type: e.target.value as any})}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500"
+                    disabled={viewTab === 'ROADMAP'}
+                    className={`w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 ${viewTab === 'ROADMAP' ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
-                    <option value="BUG">Bug</option>
-                    <option value="FEATURE">Fitur</option>
-                    <option value="IMPROVEMENT">Peningkatan</option>
+                    {viewTab === 'ROADMAP' ? (
+                      <option value="ROADMAP">Roadmap</option>
+                    ) : (
+                      <>
+                        <option value="BUG">Bug</option>
+                        <option value="FEATURE">Fitur</option>
+                        <option value="IMPROVEMENT">Peningkatan</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div>
