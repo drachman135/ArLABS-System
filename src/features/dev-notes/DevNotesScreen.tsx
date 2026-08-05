@@ -40,7 +40,7 @@ interface DevNote {
   target_version: string | null;
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  type: 'BUG' | 'FEATURE' | 'IMPROVEMENT' | 'TASK' | 'ROADMAP';
+  type: 'BUG' | 'FEATURE' | 'IMPROVEMENT' | 'TASK' | 'ROADMAP' | 'ROUTINE';
   is_pinned?: boolean;
   labels?: string[];
   created_at: string;
@@ -72,6 +72,9 @@ export const DevNotesScreen: React.FC = () => {
   
   const [viewingNote, setViewingNote] = useState<DevNote | null>(null);
   const [newItemText, setNewItemText] = useState('');
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [featureName, setFeatureName] = useState('');
+  const [featureDesc, setFeatureDesc] = useState('');
   
   // Drag and Drop states
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
@@ -163,11 +166,18 @@ export const DevNotesScreen: React.FC = () => {
       if (notes.length > 0) {
         let hasRed = false;
         for (const note of notes) {
-          const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
-          const hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
-          if (hasUnchecked) {
-            hasRed = true;
-            break;
+          if (note.type === 'ROADMAP') {
+            if (note.status !== 'CLOSED' && note.status !== 'RESOLVED') {
+              hasRed = true;
+              break;
+            }
+          } else {
+            const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
+            const hasUnchecked = lines.length > 0 && lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+            if (hasUnchecked) {
+              hasRed = true;
+              break;
+            }
           }
         }
         setAppStatuses(prev => ({ ...prev, [selectedAppId]: hasRed ? 'RED' : 'GREEN' }));
@@ -225,6 +235,7 @@ export const DevNotesScreen: React.FC = () => {
           for (const note of appNoteList) {
             let nType = note.type;
             if (nType === 'TASK' && note.labels?.includes('__ROADMAP__')) nType = 'ROADMAP';
+            if (nType === 'TASK' && note.labels?.includes('__ROUTINE__')) nType = 'ROUTINE';
             
             if (nType === 'ROADMAP') {
               if (note.status !== 'CLOSED' && note.status !== 'RESOLVED') {
@@ -233,7 +244,7 @@ export const DevNotesScreen: React.FC = () => {
               }
             } else {
               const lines = (note.description || '').split('\n').filter((l: string) => l.trim() !== '');
-              const hasUnchecked = lines.length === 0 || lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/))
+              const hasUnchecked = lines.length > 0 && lines.some((l: string) => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/))
               if (hasUnchecked) { hasRed = true; break; }
             }
           }
@@ -283,12 +294,53 @@ export const DevNotesScreen: React.FC = () => {
         if (note.type === 'TASK' && note.labels?.includes('__ROADMAP__')) {
           return { ...note, type: 'ROADMAP', labels: note.labels.filter((l: string) => l !== '__ROADMAP__') };
         }
+        if (note.type === 'TASK' && note.labels?.includes('__ROUTINE__')) {
+          return { ...note, type: 'ROUTINE', labels: note.labels.filter((l: string) => l !== '__ROUTINE__') };
+        }
         return note;
       });
       
       setNotes(decodedData);
       // Cache hasil fetch untuk digunakan saat offline
       await setCache(`dev_notes_${appId}`, decodedData);
+
+      // Auto-generate ROUTINE notes if they don't exist
+      const requiredRoutines = ['BUG', 'PENAMBAHAN FITUR', 'PENYEMPURNAAN', 'FITUR TERIMPLEMENTASI'];
+      const missingRoutines = requiredRoutines.filter(title => 
+        !decodedData.some((n: any) => n.type === 'ROUTINE' && n.title === title)
+      );
+
+      if (missingRoutines.length > 0 && !isOffline) {
+        const now = new Date().toISOString();
+        const newNotes = missingRoutines.map(title => ({
+          app_id: appId,
+          title,
+          description: '',
+          status: 'OPEN' as const,
+          priority: 'MEDIUM' as const,
+          type: 'TASK',
+          labels: ['__ROUTINE__'],
+          is_pinned: false,
+          created_at: now,
+          updated_at: now
+        }));
+        
+        supabase.from('dev_notes').insert(newNotes).then(({ error }) => {
+          if (!error) {
+            // Kita bisa menggunakan fetchNotes rekursif tapi untuk menghindari infinite loop:
+            const newDecoded = newNotes.map(n => ({
+              ...n, 
+              id: 'local_' + Date.now() + Math.random(), 
+              target_version: null, 
+              type: 'ROUTINE' as const, 
+              labels: []
+            }));
+            setNotes(prev => [...newDecoded, ...prev]);
+            setCache(`dev_notes_${appId}`, [...newDecoded, ...decodedData]);
+          }
+        });
+      }
+
     } catch (err) {
       console.error('Error fetching dev notes:', err);
       // Fallback ke cache saat error
@@ -351,10 +403,12 @@ export const DevNotesScreen: React.FC = () => {
         setNotes(updatedNotes);
         await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
 
-        const dbType = updatePayload.type === 'ROADMAP' ? 'TASK' : updatePayload.type;
+        const dbType = updatePayload.type === 'ROADMAP' ? 'TASK' : updatePayload.type === 'ROUTINE' ? 'TASK' : updatePayload.type;
         const dbLabels = updatePayload.type === 'ROADMAP' 
-          ? [...(updatePayload.labels || []).filter(l => l !== '__ROADMAP__'), '__ROADMAP__'] 
-          : (updatePayload.labels || []).filter(l => l !== '__ROADMAP__');
+          ? [...(updatePayload.labels || []).filter(l => l !== '__ROADMAP__' && l !== '__ROUTINE__'), '__ROADMAP__'] 
+          : updatePayload.type === 'ROUTINE'
+          ? [...(updatePayload.labels || []).filter(l => l !== '__ROADMAP__' && l !== '__ROUTINE__'), '__ROUTINE__']
+          : (updatePayload.labels || []).filter(l => l !== '__ROADMAP__' && l !== '__ROUTINE__');
         const dbUpdatePayload = { ...updatePayload, type: dbType, labels: dbLabels };
 
         if (isOffline) {
@@ -405,9 +459,11 @@ export const DevNotesScreen: React.FC = () => {
           setNotes(updatedNotes);
           await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
 
-          const dbType = insertPayload.type === 'ROADMAP' ? 'TASK' : insertPayload.type;
+          const dbType = insertPayload.type === 'ROADMAP' ? 'TASK' : insertPayload.type === 'ROUTINE' ? 'TASK' : insertPayload.type;
           const dbLabels = insertPayload.type === 'ROADMAP' 
             ? [...(insertPayload.labels || []), '__ROADMAP__'] 
+            : insertPayload.type === 'ROUTINE'
+            ? [...(insertPayload.labels || []), '__ROUTINE__']
             : insertPayload.labels;
           const dbInsertPayload = { ...insertPayload, type: dbType, labels: dbLabels, _localId: localId };
 
@@ -421,9 +477,11 @@ export const DevNotesScreen: React.FC = () => {
           setPendingSyncCount(prev => prev + 1);
           console.log('[DevNotes] Queued INSERT for offline sync, localId:', localId);
         } else {
-          const dbType = insertPayload.type === 'ROADMAP' ? 'TASK' : insertPayload.type;
+          const dbType = insertPayload.type === 'ROADMAP' ? 'TASK' : insertPayload.type === 'ROUTINE' ? 'TASK' : insertPayload.type;
           const dbLabels = insertPayload.type === 'ROADMAP' 
             ? [...(insertPayload.labels || []), '__ROADMAP__'] 
+            : insertPayload.type === 'ROUTINE'
+            ? [...(insertPayload.labels || []), '__ROUTINE__']
             : insertPayload.labels;
           const dbInsertPayload = { ...insertPayload, type: dbType, labels: dbLabels };
 
@@ -568,18 +626,40 @@ export const DevNotesScreen: React.FC = () => {
   };
 
   const handleAddNewItem = async () => {
-    if (!newItemText.trim() || !viewingNote) return;
+    if (!viewingNote) return;
+
+    let textToAdd = newItemText;
+    if (viewingNote.title === 'FITUR TERIMPLEMENTASI') {
+      if (!featureName.trim()) return;
+      textToAdd = featureDesc.trim() ? `${featureName.trim()} || ${featureDesc.trim()}` : featureName.trim();
+    } else {
+      if (!newItemText.trim()) return;
+    }
     
-    const newDescription = viewingNote.description.trim() 
-      ? viewingNote.description + `\n[ ] ${newItemText}` 
-      : `[ ] ${newItemText}`;
+    let newDescription = viewingNote.description;
+    
+    if (editingItemIndex !== null) {
+      const lines = viewingNote.description.split('\n');
+      const prefix = viewingNote.title === 'FITUR TERIMPLEMENTASI' ? '- ' : (lines[editingItemIndex].match(/^(\s*(\[[xXvV ]\]|\([xXvV ]\)|-)\s*)/)?.[0] || '[ ] ');
+      lines[editingItemIndex] = `${prefix}${textToAdd}`;
+      newDescription = lines.join('\n');
+    } else {
+      const prefix = viewingNote.title === 'FITUR TERIMPLEMENTASI' ? '- ' : '[ ] ';
+      newDescription = viewingNote.description.trim() 
+        ? viewingNote.description + `\n${prefix}${textToAdd}` 
+        : `${prefix}${textToAdd}`;
+    }
       
     const updatedNote = { ...viewingNote, description: newDescription };
     setViewingNote(updatedNote);
     const updatedNotes = notes.map(n => n.id === viewingNote.id ? updatedNote : n);
     setNotes(updatedNotes);
     if (selectedAppId) await setCache(`dev_notes_${selectedAppId}`, updatedNotes);
+    
     setNewItemText('');
+    setFeatureName('');
+    setFeatureDesc('');
+    setEditingItemIndex(null);
 
     if (isOffline) {
       await enqueueSync({
@@ -776,13 +856,13 @@ export const DevNotesScreen: React.FC = () => {
       isCompleted = note.status === 'CLOSED' || note.status === 'RESOLVED';
     } else {
       const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
-      const hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+      const hasUnchecked = lines.length > 0 && lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
       isCompleted = !hasUnchecked;
     }
     
     // Tab filter (Aktif vs Selesai)
-    if (activeTab === 'ACTIVE' && isCompleted) return false;
-    if (activeTab === 'COMPLETED' && !isCompleted) return false;
+    if (activeTab === 'ACTIVE' && isCompleted && note.type !== 'ROUTINE') return false;
+    if (activeTab === 'COMPLETED' && (!isCompleted || note.type === 'ROUTINE')) return false;
     
     // Search filter
     const matchesSearch = note.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -833,6 +913,7 @@ export const DevNotesScreen: React.FC = () => {
       case 'IMPROVEMENT': return 'text-emerald-600 bg-emerald-50';
       case 'ROADMAP': return 'text-orange-600 bg-orange-50';
       case 'TASK': return 'text-blue-600 bg-blue-50';
+      case 'ROUTINE': return 'text-indigo-600 bg-indigo-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   };
@@ -1017,6 +1098,7 @@ export const DevNotesScreen: React.FC = () => {
               <option value="FEATURE">Fitur</option>
               <option value="IMPROVEMENT">Peningkatan</option>
               <option value="TASK">Tugas</option>
+              <option value="ROUTINE">Catatan Rutin</option>
             </select>
           </div>
           
@@ -1069,8 +1151,10 @@ export const DevNotesScreen: React.FC = () => {
             let hasUnchecked = true;
             if (note.type === 'ROADMAP') {
               hasUnchecked = note.status !== 'CLOSED' && note.status !== 'RESOLVED';
+            } else if (note.title === 'FITUR TERIMPLEMENTASI') {
+              hasUnchecked = false;
             } else {
-              hasUnchecked = lines.length === 0 || lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
+              hasUnchecked = lines.length > 0 && lines.some(l => !l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/));
             }
             
             if (viewMode === 'LIST') {
@@ -1084,7 +1168,7 @@ export const DevNotesScreen: React.FC = () => {
                     <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusColor}`}></div>
                     <h3 className="font-bold text-gray-800 truncate">{note.title}</h3>
                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider flex-shrink-0 hidden sm:flex items-center gap-1 ${getTypeColor(note.type)}`}>
-                      {note.type === 'BUG' ? 'BUG' : note.type === 'FEATURE' ? 'FITUR' : note.type === 'IMPROVEMENT' ? 'PENINGKATAN' : note.type === 'TASK' ? 'TUGAS' : note.type}
+                      {note.type === 'BUG' ? 'BUG' : note.type === 'FEATURE' ? 'FITUR' : note.type === 'IMPROVEMENT' ? 'PENINGKATAN' : note.type === 'TASK' ? 'TUGAS' : note.type === 'ROUTINE' ? 'RUTIN' : note.type}
                     </span>
                   </div>
                   
@@ -1108,14 +1192,16 @@ export const DevNotesScreen: React.FC = () => {
                           </button>
                         </div>
                       );
-                    })() : (lines.length > 0 && (
+                    })() : (lines.length > 0 && note.title !== 'FITUR TERIMPLEMENTASI' ? (
                       <div className="flex items-center gap-2 w-32">
                         <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                           <div className={`h-1.5 rounded-full ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
                         </div>
                         <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap">{progress}%</span>
                       </div>
-                    ))}
+                    ) : (lines.length > 0 && note.title === 'FITUR TERIMPLEMENTASI' && (
+                      <div className="text-[10px] font-bold text-gray-500 whitespace-nowrap">{lines.length} fitur</div>
+                    )))}
                     
                     <div className="flex items-center space-x-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => handleTogglePin(note, e)} className={`p-1.5 rounded-lg transition-colors ${note.is_pinned ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}><Pin className={`w-4 h-4 ${note.is_pinned ? 'fill-blue-600' : ''}`} /></button>
@@ -1147,6 +1233,7 @@ export const DevNotesScreen: React.FC = () => {
                      note.type === 'FEATURE' ? 'FITUR' :
                      note.type === 'IMPROVEMENT' ? 'PENINGKATAN' :
                      note.type === 'ROADMAP' ? 'Fase Roadmap' :
+                     note.type === 'ROUTINE' ? 'RUTIN' :
                      note.type === 'TASK' ? 'TUGAS' : note.type}
                   </span>
                   {note.labels && note.labels.map(label => (
@@ -1212,6 +1299,16 @@ export const DevNotesScreen: React.FC = () => {
                 const lines = (note.description || '').split('\n').filter(l => l.trim() !== '');
                 if (lines.length === 0) return null;
                 
+                if (note.title === 'FITUR TERIMPLEMENTASI') {
+                  return (
+                    <div className="mb-4">
+                      <p className="text-xs text-gray-500 mb-2 font-medium">
+                        {lines.length} fitur telah diimplementasikan
+                      </p>
+                    </div>
+                  );
+                }
+
                 const checkedCount = lines.filter(l => l.trim().match(/^(\[[xXvV]\]|\([xXvV]\))/)).length;
                 const progress = Math.round((checkedCount / lines.length) * 100);
                 
@@ -1319,6 +1416,7 @@ export const DevNotesScreen: React.FC = () => {
                         <option value="BUG">Bug</option>
                         <option value="FEATURE">Fitur</option>
                         <option value="IMPROVEMENT">Peningkatan</option>
+                        <option value="ROUTINE">Catatan Rutin</option>
                       </>
                     )}
                   </select>
@@ -1437,33 +1535,71 @@ export const DevNotesScreen: React.FC = () => {
                       onDragEnter={(e) => handleDragEnter(e, idx)}
                       onDragEnd={handleDragEnd}
                       onDragOver={(e) => e.preventDefault()}
-                      onClick={() => handleToggleChecklist(viewingNote, idx)}
+                      onClick={() => {
+                        if (viewingNote.title !== 'FITUR TERIMPLEMENTASI') handleToggleChecklist(viewingNote, idx)
+                      }}
                       className={`flex items-start gap-3 p-3.5 rounded-xl hover:bg-gray-200/60 active:bg-gray-300/50 transition-colors cursor-pointer group ${draggedItemIndex === idx ? 'opacity-50 bg-gray-200' : ''} ${dragOverItemIndex === idx && draggedItemIndex !== idx ? 'border-t-2 border-blue-500' : ''}`}
                     >
                       <div className="mt-0.5 flex-shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <GripVertical className="w-5 h-5" />
                       </div>
-                      <div className="mt-0.5 flex-shrink-0">
-                        <input 
-                          type="checkbox" 
-                          checked={!!isChecked} 
-                          readOnly 
-                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer pointer-events-none" 
-                        />
+                      {viewingNote.title === 'FITUR TERIMPLEMENTASI' ? (
+                        <div className="mt-2 flex-shrink-0 w-2 h-2 rounded-full bg-gray-500 mr-1"></div>
+                      ) : (
+                        <div className="mt-0.5 flex-shrink-0">
+                          <input 
+                            type="checkbox" 
+                            checked={!!isChecked} 
+                            readOnly 
+                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer pointer-events-none" 
+                          />
+                        </div>
+                      )}
+                      {(() => {
+                        if (viewingNote.title === 'FITUR TERIMPLEMENTASI' && cleanLine.includes('||')) {
+                          const parts = cleanLine.split('||');
+                          return (
+                            <div className="flex-1 flex flex-col pt-0.5">
+                              <span className="text-base font-bold text-gray-800 leading-snug">{parts[0].trim()}</span>
+                              <span className="text-[13px] text-gray-500 mt-0.5 leading-relaxed">{parts.slice(1).join('||').trim()}</span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <span className={`text-base font-medium leading-snug flex-1 ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                            {cleanLine}
+                          </span>
+                        );
+                      })()}
+                      <div className="flex items-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 gap-0.5">
+                        <button
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setEditingItemIndex(idx);
+                            if (viewingNote.title === 'FITUR TERIMPLEMENTASI') {
+                               const parts = cleanLine.split('||');
+                               setFeatureName(parts[0]?.trim() || '');
+                               setFeatureDesc(parts.slice(1).join('||').trim() || '');
+                            } else {
+                               setNewItemText(cleanLine);
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setDeleteConfirm({ isOpen: true, type: 'ITEM', id: viewingNote.id, lineIndex: idx });
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Hapus Tugas"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <span className={`text-base font-medium leading-snug flex-1 ${isChecked ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
-                        {cleanLine}
-                      </span>
-                      <button
-                        onClick={(e) => { 
-                          e.stopPropagation(); 
-                          setDeleteConfirm({ isOpen: true, type: 'ITEM', id: viewingNote.id, lineIndex: idx });
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex-shrink-0"
-                        title="Hapus Tugas"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
                   );
                 })}
@@ -1471,26 +1607,74 @@ export const DevNotesScreen: React.FC = () => {
 
             </div>
             
-            <div className="p-4 border-t border-gray-200 bg-white">
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-                <input 
-                  type="text" 
-                  value={newItemText}
-                  onChange={(e) => setNewItemText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddNewItem();
-                  }}
-                  placeholder="Ketik tugas baru..."
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm font-medium text-gray-700 placeholder-gray-400"
-                />
-                <button 
-                  onClick={handleAddNewItem}
-                  disabled={!newItemText.trim()}
-                  className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors disabled:bg-gray-300 flex-shrink-0"
-                >
-                  <Send className="w-4 h-4 ml-0.5" />
-                </button>
-              </div>
+            <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0">
+              {viewingNote.title === 'FITUR TERIMPLEMENTASI' ? (
+                <div className="flex flex-col gap-2.5">
+                  <input 
+                    type="text" 
+                    value={featureName}
+                    onChange={(e) => setFeatureName(e.target.value)}
+                    placeholder="Nama fitur..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  />
+                  <input 
+                    type="text" 
+                    value={featureDesc}
+                    onChange={(e) => setFeatureDesc(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddNewItem();
+                    }}
+                    placeholder="Deskripsi fitur (opsional)..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  />
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleAddNewItem}
+                      disabled={!featureName.trim()}
+                      className={`h-10 flex-1 px-4 rounded-xl text-white flex items-center justify-center transition-colors disabled:bg-gray-300 ${editingItemIndex !== null ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                      {editingItemIndex !== null ? <CheckCircle2 className="w-4 h-4 mr-1.5" /> : <Send className="w-4 h-4 mr-1.5 ml-0.5" />}
+                      <span className="font-bold">{editingItemIndex !== null ? 'Simpan' : 'Tambah'}</span>
+                    </button>
+                    {editingItemIndex !== null && (
+                      <button 
+                        onClick={() => { setEditingItemIndex(null); setFeatureName(''); setFeatureDesc(''); }}
+                        className="h-10 px-4 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-colors font-bold"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+                  <input 
+                    type="text" 
+                    value={newItemText}
+                    onChange={(e) => setNewItemText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddNewItem();
+                    }}
+                    placeholder="Ketik tugas baru..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm font-medium text-gray-700 placeholder-gray-400"
+                  />
+                  <button 
+                    onClick={handleAddNewItem}
+                    disabled={!newItemText.trim()}
+                    className={`w-8 h-8 rounded-full text-white flex items-center justify-center transition-colors disabled:bg-gray-300 flex-shrink-0 ${editingItemIndex !== null ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    {editingItemIndex !== null ? <CheckCircle2 className="w-4 h-4" /> : <Send className="w-4 h-4 ml-0.5" />}
+                  </button>
+                  {editingItemIndex !== null && (
+                    <button 
+                      onClick={() => { setEditingItemIndex(null); setNewItemText(''); }}
+                      className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300 transition-colors flex-shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1572,6 +1756,7 @@ export const DevNotesScreen: React.FC = () => {
                   <option value="FEATURE">Fitur</option>
                   <option value="IMPROVEMENT">Peningkatan</option>
                   <option value="TASK">Tugas</option>
+                  <option value="ROUTINE">Catatan Rutin</option>
                 </select>
               </div>
               <div>
