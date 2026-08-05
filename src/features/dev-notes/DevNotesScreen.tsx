@@ -922,7 +922,7 @@ export const DevNotesScreen: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 flex flex-col md:flex-row gap-4 flex-wrap">
-        <div className="w-full md:max-w-[250px] relative" ref={dropdownRef}>
+        <div className="w-full md:max-w-[250px] relative z-50" ref={dropdownRef}>
           <button 
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex justify-between items-center"
