@@ -805,7 +805,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
         ) : (
           // RENDER OTHER VIEWS inside clean container
           <div 
-            className="bg-white p-4 sm:p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-auto mb-12 w-full overflow-hidden"
+            className="bg-white p-4 sm:p-6 rounded-[24px] border border-gray-200/60 shadow-sm min-h-[75vh] animate-[zoomInSoft_0.3s_ease-out] mx-auto mb-12 w-full"
             style={{ maxWidth: 'calc(100vw - 32px)' }}
           >
             <div className="flex items-center space-x-4 mb-8">
@@ -821,7 +821,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ session, profi
               </div>
             </div>
 
-            <div className="rounded-2xl overflow-hidden p-1 neu-content-wrapper">
+            <div className="rounded-2xl p-1 neu-content-wrapper">
               {activeView === 'analytics' && <AnalyticsDashboard />}
               {activeView === 'apkstats' && <ApkStatsDashboard />}
               {activeView === 'crash' && <CrashReportScreen />}
