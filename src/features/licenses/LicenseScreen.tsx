@@ -472,6 +472,9 @@ export const LicenseScreen: React.FC = () => {
         .insert([{
           license_key: generatedKey,
           customer_id: newlyCreatedCustomerId,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          customer_phone: customerWhatsapp,
           license_type: finalLicenseType,
           type: finalType,
           duration_days: finalDurationDays,
