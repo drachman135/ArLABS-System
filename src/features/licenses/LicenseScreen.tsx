@@ -475,6 +475,7 @@ export const LicenseScreen: React.FC = () => {
           customer_name: customerName,
           customer_email: customerEmail,
           customer_phone: customerWhatsapp,
+          notes: customerEcommerce,
           license_type: finalLicenseType,
           type: finalType,
           duration_days: finalDurationDays,
